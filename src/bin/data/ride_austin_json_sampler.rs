@@ -1,5 +1,7 @@
 use clap::Parser;
-use mosaic::data_toolkit::read_csv_and_convert;
+use mosaic::data_toolkit::encoding::{
+    cli::EncodingArgs, encode_csv, print_summary, write_metadata, PointKind,
+};
 use rand::prelude::*;
 use serde_json;
 use std::error::Error;
@@ -16,8 +18,11 @@ struct Args {
     output: String,
     #[arg(short, long)]
     query_num: usize,
+    /// 0: pickup only, 1: pickup and drop-off.
     #[arg(short, long, default_value_t = 0)]
     output_type: u8,
+    #[command(flatten)]
+    encoding: EncodingArgs,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -25,7 +30,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input_file = &args.input;
     let output_file = &args.output;
     let query_num = args.query_num;
-    let output_type = args.output_type;
 
     println!("Starting RideAustin client points JSON generation...");
 
@@ -36,13 +40,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    // Read and convert CSV data
+    // Read and encode CSV data
     println!("Reading and converting CSV data from {}...", input_file);
-    let client_points = read_csv_and_convert(input_file, output_type)?;
-    println!(
-        "Converted {} ride points to client format",
-        client_points.len()
-    );
+    let encoding = args.encoding.to_encoding();
+    let point_kind = PointKind::from_output_type(args.output_type)?;
+    let dataset = encode_csv(input_file, point_kind, &encoding)?;
+    print_summary(&dataset.metadata);
+    let client_points = dataset.points;
 
     // Sample query_num points
     let client_points = if client_points.len() > query_num {
@@ -61,22 +65,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     let file = File::create(output_file)?;
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &client_points)?;
+    let mut metadata = dataset.metadata;
+    metadata.kept_rides = client_points.len();
+    let metadata_file = write_metadata(output_file, &metadata)?;
 
     println!("Successfully generated client points JSON!");
     println!("Total points: {}", client_points.len());
     println!("Output file: {}", output_file);
+    println!("Encoding metadata: {}", metadata_file.display());
 
     // Print some sample statistics
     if !client_points.is_empty() {
         println!("\nSample points:");
         for (i, point) in client_points.iter().take(5).enumerate() {
-            println!(
-                "Point {}: [start_lat_grid: {}, start_lon_grid: {}]",
-                i + 1,
-                point[0],
-                point[1]
-            );
-            // println!("  Point {}: [start_lat_grid: {}, start_lon_grid: {}, end_lat_grid: {}, end_lon_grid: {}]", i+1, point[0], point[1], point[2], point[3]);
+            println!("Point {}: {:?}", i + 1, point);
         }
     }
 

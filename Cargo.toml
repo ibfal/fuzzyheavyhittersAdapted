@@ -99,6 +99,10 @@ name = "ride_austin_json_sampler"
 path = "src/bin/data/ride_austin_json_sampler.rs"
 
 [[bin]]
+name = "heavy_hitters_decoder"
+path = "src/bin/data/heavy_hitters_decoder.rs"
+
+[[bin]]
 name = "synthetic_data_generator"
 path = "src/bin/data/synthetic_data_generator.rs"
 

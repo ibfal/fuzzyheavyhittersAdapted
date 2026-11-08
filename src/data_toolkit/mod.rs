@@ -1,3 +1,4 @@
+pub mod encoding;
 pub mod synthetic_data;
 
 use csv::Reader;
@@ -7,19 +8,19 @@ use std::path::Path;
 // Austin bounding box
 const AUSTIN_CENTER: (f64, f64) = (30.267, -97.743);
 const BUFFER_DEGREES: f64 = 1.0;
-const AUSTIN_MIN_LAT: f64 = AUSTIN_CENTER.0 - BUFFER_DEGREES;
+pub(crate) const AUSTIN_MIN_LAT: f64 = AUSTIN_CENTER.0 - BUFFER_DEGREES;
 // const AUSTIN_MAX_LAT: f64 = AUSTIN_CENTER.0 + BUFFER_DEGREES;
-const AUSTIN_MIN_LON: f64 = AUSTIN_CENTER.1 - BUFFER_DEGREES;
+pub(crate) const AUSTIN_MIN_LON: f64 = AUSTIN_CENTER.1 - BUFFER_DEGREES;
 // const AUSTIN_MAX_LON: f64 = AUSTIN_CENTER.1 + BUFFER_DEGREES;
 
 //Grid metadata
 // const PRECISION: i32 = 3;
-const DECIMAL_SCALE: u32 = 1000;
+pub(crate) const DECIMAL_SCALE: u32 = 1000;
 
-const LAT_GRID_SIZE: u32 = 2000;
-const LON_GRID_SIZE: u32 = 2000;
+pub(crate) const LAT_GRID_SIZE: u32 = 2000;
+pub(crate) const LON_GRID_SIZE: u32 = 2000;
 
-const LAT_BITS: usize = 11;
+pub(crate) const LAT_BITS: usize = 11;
 const LON_BITS: usize = 11;
 
 pub fn geo_to_grid(lat: f64, lon: f64) -> (u32, u32) {
@@ -80,43 +81,10 @@ pub fn csv_to_bitvecs<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<Vec<bool>>>, Bo
         .collect()
 }
 
+/// Read a RideAustin CSV into Mosaic's original grid points: `[lat, lon]` for `output_type` 0,
+/// `[start_lat, start_lon, end_lat, end_lon]` for 1. Use [`encoding::encode_csv`] for the other
+/// encodings.
 pub fn read_csv_and_convert<P: AsRef<Path>>(path: P, output_type: u8) -> Result<Vec<Vec<u128>>, Box<dyn Error>> {
-    let mut rdr = Reader::from_path(path)?;
-
-    match output_type {
-        0 => {
-            rdr.records()
-                .map(|record| {
-                    let record = record?;
-                    let start_lon = record[15].parse::<f64>()?;
-                    let start_lat = record[16].parse::<f64>()?;
-
-                    // Convert to grid coordinates (same as csv_to_bitvecs function)
-                    let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
-
-                    // Convert to u128 and create point as [lat, lon]
-                    Ok(vec![start_lat_grid as u128, start_lon_grid as u128])
-                })
-                .collect()
-        }
-        1 => {
-            rdr.records()
-                .map(|record| {
-                    let record = record?;
-                    let start_lon = record[15].parse::<f64>()?;
-                    let start_lat = record[16].parse::<f64>()?;
-                    let end_lat = record[6].parse::<f64>()?;
-                    let end_lon = record[7].parse::<f64>()?;
-
-                    // Convert to grid coordinates (same as csv_to_bitvecs function)
-                    let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
-                    let (end_lat_grid, end_lon_grid) = geo_to_grid(end_lat, end_lon);
-
-                    // Convert to u128 and create point as [lat, lon]
-                    Ok(vec![start_lat_grid as u128, start_lon_grid as u128, end_lat_grid as u128, end_lon_grid as u128])
-                })
-                .collect()
-        }
-        _ => Err(format!("unsupported output_type: {}", output_type).into()),
-    }
+    let point_kind = encoding::PointKind::from_output_type(output_type)?;
+    Ok(encoding::encode_csv(path, point_kind, &encoding::Encoding::MosaicGrid)?.points)
 }

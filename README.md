@@ -613,6 +613,40 @@ cargo run --release --bin ride_austin_json_sampler --
 ```
 All prepared .json files for our experiments are available on Zenodo, in the same `data` folder. 
 
+### Location encodings
+The generator and the sampler take `--encoding` to choose how a location becomes integer coordinates.
+Mosaic compares points coordinate by coordinate, so an encoding has to give coordinates whose differences track physical distance; `delta` is then measured in cells of that encoding.
+The protocol itself does not change, only `d` (coordinates per point), `h1` (bits per coordinate) and the parameters that depend on them.
+
+| `--encoding` | Coordinates | `d`, `h1` | Outside the area | Default `delta` (Linf / L1 / L2) |
+| --- | --- | --- | --- | --- |
+| `mosaic-grid` (default) | `[lat, lon]` on the original 0.001 degree grid | 2, 11 | clamped to the edge | 5 / 5 / 5 |
+
+Next to the points, the generator writes `<output>.encoding.json` with the encoding, `d`, `h1` and how many rides were kept, clamped and dropped.
+A dropped ride is not sent, so `num_clients` and the 2% `match_threshold` come from the kept rides.
+
+The original grid needs nothing new: it keeps using `data/start_busiest_<dataset>.json` and the configs in `configs/unknown_dictionary`.
+Running the generator with the default `--encoding mosaic-grid` writes the same JSON as before, plus the `.encoding.json` that the decoder reads.
+
+For another encoding, generate its datasets and configs (`<encoding>` is the `--encoding` value, e.g. `geohash`):
+```bash
+mkdir -p data/encodings/<encoding>
+for B in day week month; do
+  cargo run --release --bin ride_austin_json_generator -- \
+    --input data/sample_busiest_${B}.csv --output data/encodings/<encoding>/start_busiest_${B}.json \
+    --output-type 0 --encoding <encoding>
+done
+python3 src/data_toolkit/make_encoding_configs.py <encoding>
+```
+The configs are written to `configs/encodings/<encoding>/busiest_<dataset>/`, and `ENCODING=<encoding> ./run_exp.sh <role>` runs them.
+Without `ENCODING` (or with `ENCODING=mosaic_grid`), `run_exp.sh` runs `configs/unknown_dictionary` as before.
+
+`mosaic_others ground-truth` writes the heavy hitters as integer points; `heavy_hitters_decoder` turns them back into cells and locations:
+```bash
+cargo run --release --bin heavy_hitters_decoder -- \
+  --input results.json --metadata data/start_busiest_day.encoding.json --output heavy_hitters.csv
+```
+
 ## Prepare the config file
 First, prepare a network config file. 
 We usually put this file in `configs/network_config.json`.
