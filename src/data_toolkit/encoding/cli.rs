@@ -12,6 +12,8 @@ pub enum EncodingName {
     Morton,
     /// Geohash cells inside `--geohash-prefix`; points outside are dropped.
     Geohash,
+    /// H3 hexagons as cube coordinates around `--h3-origin-*` (3 coordinates per location).
+    H3,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -42,6 +44,20 @@ pub struct EncodingArgs {
     /// Geohash bits below the prefix, split into latitude and longitude indices.
     #[arg(long, default_value_t = 21)]
     pub geohash_bits: usize,
+
+    /// H3 resolution of the cells, 0 (coarsest) to 15.
+    #[arg(long, default_value_t = 10)]
+    pub h3_resolution: u8,
+    /// Latitude of the H3 origin; coordinates are relative to the cell containing it.
+    #[arg(long, default_value_t = 30.267, allow_negative_numbers = true)]
+    pub h3_origin_lat: f64,
+    /// Longitude of the H3 origin.
+    #[arg(long, default_value_t = -97.743, allow_negative_numbers = true)]
+    pub h3_origin_lon: f64,
+    /// Bits per H3 coordinate (the config's h1); cells up to 2^(bits-1) - 1 steps from the
+    /// origin fit.
+    #[arg(long, default_value_t = 11)]
+    pub h3_axis_bits: usize,
 }
 
 impl EncodingArgs {
@@ -58,6 +74,12 @@ impl EncodingArgs {
             EncodingName::Geohash => Encoding::Geohash {
                 prefix: self.geohash_prefix.clone(),
                 bits: self.geohash_bits,
+            },
+            EncodingName::H3 => Encoding::H3 {
+                resolution: self.h3_resolution,
+                origin_lat: self.h3_origin_lat,
+                origin_lon: self.h3_origin_lon,
+                axis_bits: self.h3_axis_bits,
             },
         }
     }

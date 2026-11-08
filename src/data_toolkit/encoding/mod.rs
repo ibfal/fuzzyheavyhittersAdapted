@@ -17,9 +17,11 @@ use serde::{Deserialize, Serialize};
 
 pub mod cli;
 pub mod geohash;
+mod h3;
 mod morton;
 mod mosaic_grid;
 
+pub use self::h3::H3;
 pub use geohash::Geohash;
 pub use morton::Morton;
 pub use mosaic_grid::MosaicGrid;
@@ -46,6 +48,16 @@ pub enum Encoding {
     /// Standard geohash cells inside the cell `prefix` (base32, e.g. "9v6" for Austin), `bits`
     /// bits below it; points outside the prefix cell are dropped.
     Geohash { prefix: String, bits: usize },
+
+    /// H3 cells at `resolution` as cube coordinates `[i, j, i - j]` (each shifted by
+    /// `2^(axis_bits - 1)`) around the cell containing the origin; cells too far from it are
+    /// dropped.
+    H3 {
+        resolution: u8,
+        origin_lat: f64,
+        origin_lon: f64,
+        axis_bits: usize,
+    },
 }
 
 impl Encoding {
@@ -62,6 +74,12 @@ impl Encoding {
                 *min_lat, *max_lat, *min_lon, *max_lon, *axis_bits,
             )),
             Encoding::Geohash { prefix, bits } => Box::new(Geohash::new(prefix, *bits)),
+            Encoding::H3 {
+                resolution,
+                origin_lat,
+                origin_lon,
+                axis_bits,
+            } => Box::new(H3::new(*resolution, *origin_lat, *origin_lon, *axis_bits)),
         }
     }
 
@@ -71,6 +89,7 @@ impl Encoding {
             Encoding::MosaicGrid => "mosaic_grid",
             Encoding::Morton { .. } => "morton",
             Encoding::Geohash { .. } => "geohash",
+            Encoding::H3 { .. } => "h3",
         }
     }
 }

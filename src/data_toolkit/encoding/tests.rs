@@ -151,3 +151,75 @@ fn geohash_splits_the_bits_after_the_prefix_into_lat_and_lon() {
     assert_eq!(gh.encode(FAR_AWAY.0, FAR_AWAY.1), Encoded::Dropped);
     assert!(gh.decode(&[0, 1 << 10]).is_none());
 }
+
+fn default_h3() -> H3 {
+    H3::new(10, DOWNTOWN.0, DOWNTOWN.1, 11)
+}
+
+/// Resolution 10 cells around a point, out to `k` steps.
+fn h3_disk(h3: &H3, (lat, lon): (f64, f64), k: u32) -> Vec<(h3o::CellIndex, Vec<u128>)> {
+    let center = h3.cell(lat, lon).unwrap();
+    center
+        .grid_disk::<Vec<_>>(k)
+        .into_iter()
+        .map(|cell| {
+            let c = h3o::LatLng::from(cell);
+            (cell, coords(h3.encode(c.lat(), c.lng())))
+        })
+        .collect()
+}
+
+fn diff(a: u128, b: u128) -> i64 {
+    a as i64 - b as i64
+}
+
+#[test]
+fn h3_linf_is_the_grid_distance() {
+    let h3 = default_h3();
+    for place in [DOWNTOWN, AIRPORT] {
+        let disk = h3_disk(&h3, place, 12);
+        let (center, c0) = &disk[0];
+        for (cell, c) in &disk {
+            let linf = (0..3).map(|k| diff(c[k], c0[k]).abs()).max().unwrap();
+            assert_eq!(linf, center.grid_distance(*cell).unwrap() as i64, "{}", cell);
+        }
+    }
+}
+
+#[test]
+fn h3_l2_is_proportional_to_the_center_distance() {
+    let h3 = default_h3();
+    let disk = h3_disk(&h3, DOWNTOWN, 8);
+    let (center, c0) = &disk[0];
+    let center_ll = h3o::LatLng::from(*center);
+    let neighbour = h3o::LatLng::from(disk[1].0);
+    let spacing = center_ll.distance_m(neighbour);
+    for (cell, c) in &disk[1..] {
+        let l2_squared: i64 = (0..3).map(|k| diff(c[k], c0[k]).pow(2)).sum();
+        let center_distance = center_ll.distance_m(h3o::LatLng::from(*cell)) / spacing;
+        let ratio = (l2_squared as f64 / 2.0).sqrt() / center_distance;
+        // H3 hexagons are slightly distorted, so the ratio is close to, not exactly, 1.
+        assert!((ratio - 1.0).abs() < 0.02, "{}: ratio {}", cell, ratio);
+    }
+}
+
+#[test]
+fn h3_round_trips_and_rejects_non_cells() {
+    let h3 = default_h3();
+    assert_eq!((h3.dims(), h3.axis_bits()), (3, 11));
+    let downtown = coords(h3.encode(DOWNTOWN.0, DOWNTOWN.1));
+    assert_eq!(downtown, vec![1024, 1024, 1024]);
+    for p in [DOWNTOWN, AIRPORT, (30.4012, -97.7254)] {
+        assert_round_trip(&h3, p);
+        let c = coords(h3.encode(p.0, p.1));
+        assert_eq!(h3.label(&c), h3.cell(p.0, p.1).unwrap().to_string());
+    }
+    // The airport's resolution 9 parent is the cell in Mastic's syn-h3.log.
+    let airport = coords(h3.encode(AIRPORT.0, AIRPORT.1));
+    assert_eq!(h3.cell(AIRPORT.0, AIRPORT.1).unwrap().parent(h3o::Resolution::Nine).unwrap().to_string(), "89489e30c87ffff");
+    // A triple whose third coordinate is not i - j is not a cell.
+    assert!(h3.decode(&[airport[0], airport[1], airport[2] + 1]).is_none());
+    assert!(h3.decode(&[2048, 0, 0]).is_none());
+    assert_eq!(h3.encode(FAR_AWAY.0, FAR_AWAY.1), Encoded::Dropped);
+    assert_eq!(h3.encode(f64::NAN, 0.0), Encoded::Dropped);
+}

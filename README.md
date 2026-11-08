@@ -623,6 +623,7 @@ The protocol itself does not change, only `d` (coordinates per point), `h1` (bit
 | `mosaic-grid` (default) | `[lat, lon]` on the original 0.001 degree grid | 2, 11 | clamped to the edge | 5 / 5 / 5 |
 | `morton` | `[lat, lon]` cell indices in the `--morton-*` box, `2^axis_bits` cells per axis | 2, `axis_bits` (default 10) | dropped | 5 / 5 / 5 |
 | `geohash` | `[lat, lon]` indices from the `--geohash-bits` bits below `--geohash-prefix` (default 21 below `9v6`) | 2, 11 | dropped | 5 / 5 / 5 |
+| `h3` | cube coordinates `[i, j, i - j]` of the `--h3-resolution` (default 10) hexagon around `--h3-origin-*` | 3, 11 | dropped | 4 / 8 / 5 |
 
 Next to the points, the generator writes `<output>.encoding.json` with the encoding, `d`, `h1` and how many rides were kept, clamped and dropped.
 A dropped ride is not sent, so `num_clients` and the 2% `match_threshold` come from the kept rides.
@@ -652,6 +653,14 @@ Other cell sizes, such as Mastic's `morton-h3res10-area` box (`--morton-max-lat 
 All of Austin lies in `9v6` (15 bits); the 21 bits below it give 11 latitude and 10 longitude bits, and cells of 0.000687 by 0.001373 degrees (about 76 m by 132 m, the closest geohash area to Mosaic's cells).
 Mosaic uses one `delta` for every coordinate, so on these cells the neighbourhood is about 1.7 times wider east-west than north-south; an odd number of bits below `9v6` (e.g. `--geohash-bits 20`) gives cells that are square in degrees, like Mosaic's.
 On the busiest day it finds 891 / 399 / 525 heavy hitters with no rides dropped.
+
+**H3.** The H3 index digits that Mastic sends cannot be used as coordinates, because neighbouring hexagons can have very different indices.
+Instead, each cell is given by its local `(i, j)` coordinates relative to the cell containing the origin (downtown Austin by default), sent as the three cube coordinates `[i, j, i - j]`, each shifted by `2^(h1 - 1)`.
+On these coordinates `Linf` is exactly the H3 grid distance (number of hexagon steps), `L1` is twice the grid distance, and `L2` is `sqrt(2)` times the distance between cell centers in units of the center spacing (about 140 m at resolution 10).
+The defaults `delta` = 4 / 8 / 5 give neighbourhoods of about 560 m, comparable to the other encodings; `Linf` 4 and `L1` 8 are the same neighbourhood.
+
+The crawl does not know that the third coordinate is `i - j`, so it also reports triples that are not cells: on the busiest day 5018 `Linf` heavy hitters, of which 445 are cells.
+`heavy_hitters_decoder` leaves the others out. They also make the crawl about 3 times longer (13953 prefixes instead of 4257 if the servers dropped every prefix that cannot contain a cell, which they could do from the public prefixes alone; this is not implemented).
 
 `mosaic_others ground-truth` writes the heavy hitters as integer points; `heavy_hitters_decoder` turns them back into cells and locations:
 ```bash

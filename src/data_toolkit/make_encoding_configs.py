@@ -40,6 +40,10 @@ DELTAS = {
     "morton": {"Linf": 5, "L1": 5, "L2": 5},
     # 76 m x 132 m cells: delta = 5 is about 380 m north-south and 660 m east-west.
     "geohash": {"Linf": 5, "L1": 5, "L2": 5},
+    # Resolution 10 hexagons, centers about 140 m apart, as [i, j, i - j]. Linf is the number of
+    # hexagon steps, L1 twice that (so 8 here is the same neighbourhood as Linf 4), and L2 is
+    # sqrt(2) times the center distance in spacings (5 is a radius of 3.5 spacings, about 500 m).
+    "h3": {"Linf": 4, "L1": 8, "L2": 5},
 }
 
 

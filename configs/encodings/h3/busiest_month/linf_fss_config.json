@@ -1,0 +1,24 @@
+{
+  "data_file": "data/encodings/h3/start_busiest_month.json",
+  "query_file": "data/encodings/h3/start_busiest_month.json",
+  "protocol": {
+    "delta": 4,
+    "match_threshold": 2303,
+    "enable_sketch": true,
+    "h1": 11,
+    "h2": 1,
+    "h3": 18,
+    "d": 3,
+    "share_method": "FSS",
+    "dictionary_type": "Unknown",
+    "check_property": "Equality",
+    "distance_metric": "Linf",
+    "num_clients": 115174,
+    "sketch_modulus": 892270022585185806328177
+  },
+  "output": {
+    "verbose": true,
+    "show_intermediate": false,
+    "output_file": "results.json"
+  }
+}
