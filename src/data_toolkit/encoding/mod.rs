@@ -16,8 +16,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub mod cli;
+mod morton;
 mod mosaic_grid;
 
+pub use morton::Morton;
 pub use mosaic_grid::MosaicGrid;
 
 /// Which encoding to use, with its parameters. Stored next to every generated dataset so the
@@ -28,12 +30,31 @@ pub enum Encoding {
     /// Mosaic's original RideAustin grid: 0.001 degree cells, 11 bits per axis, out-of-grid
     /// points clamped to the edge.
     MosaicGrid,
+
+    /// A uniform grid over a bounding box, `2^axis_bits` cells per axis; points outside the box
+    /// are dropped. The edges are inclusive at `min` and exclusive at `max`, in degrees.
+    Morton {
+        min_lat: f64,
+        max_lat: f64,
+        min_lon: f64,
+        max_lon: f64,
+        axis_bits: usize,
+    },
 }
 
 impl Encoding {
     pub fn encoder(&self) -> Box<dyn LocationEncoder> {
         match self {
             Encoding::MosaicGrid => Box::new(MosaicGrid),
+            Encoding::Morton {
+                min_lat,
+                max_lat,
+                min_lon,
+                max_lon,
+                axis_bits,
+            } => Box::new(Morton::new(
+                *min_lat, *max_lat, *min_lon, *max_lon, *axis_bits,
+            )),
         }
     }
 
@@ -41,6 +62,7 @@ impl Encoding {
     pub fn name(&self) -> &'static str {
         match self {
             Encoding::MosaicGrid => "mosaic_grid",
+            Encoding::Morton { .. } => "morton",
         }
     }
 }

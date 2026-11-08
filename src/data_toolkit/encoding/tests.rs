@@ -78,3 +78,44 @@ fn metadata_round_trips_through_json() {
     let json = serde_json::to_string(&metadata).unwrap();
     assert_eq!(serde_json::from_str::<EncodingMetadata>(&json).unwrap(), metadata);
 }
+
+fn default_morton() -> Morton {
+    Morton::new(29.9005, 30.9245, -98.0505, -97.0265, 10)
+}
+
+#[test]
+fn default_morton_cells_are_mosaic_grid_cells() {
+    let (morton, grid) = (default_morton(), MosaicGrid);
+    // Every 3-decimal coordinate in the box (RideAustin's precision) lands in the Mosaic grid
+    // cell shifted by (634, 693).
+    for lat_milli in (29_901..=30_924).step_by(7) {
+        for lon_milli in (-98_050..=-97_027).step_by(11) {
+            let (lat, lon) = (lat_milli as f64 / 1000.0, lon_milli as f64 / 1000.0);
+            let m = coords(morton.encode(lat, lon));
+            let g = coords(grid.encode(lat, lon));
+            assert_eq!(m, vec![g[0] - 634, g[1] - 693], "({}, {})", lat, lon);
+        }
+    }
+}
+
+#[test]
+fn morton_drops_outside_points_and_round_trips() {
+    let morton = default_morton();
+    for p in [DOWNTOWN, AIRPORT] {
+        assert_round_trip(&morton, p);
+    }
+    assert_eq!(morton.encode(FAR_AWAY.0, FAR_AWAY.1), Encoded::Dropped);
+    assert_eq!(morton.encode(29.9004, -97.743), Encoded::Dropped);
+    assert_eq!(morton.encode(30.9245, -97.743), Encoded::Dropped);
+    assert_eq!(morton.encode(f64::NAN, -97.743), Encoded::Dropped);
+    assert_eq!(morton.encode(29.9005, -98.0505), Encoded::Inside(vec![0, 0]));
+    assert!(morton.decode(&[1024, 0]).is_none());
+}
+
+#[test]
+fn morton_encoding_parses_from_metadata_json() {
+    let json = r#"{"type":"morton","min_lat":29.9005,"max_lat":30.9245,"min_lon":-98.0505,"max_lon":-97.0265,"axis_bits":10}"#;
+    let encoding: Encoding = serde_json::from_str(json).unwrap();
+    assert_eq!(encoding.encoder().axis_bits(), 10);
+    assert_eq!(encoding.name(), "morton");
+}

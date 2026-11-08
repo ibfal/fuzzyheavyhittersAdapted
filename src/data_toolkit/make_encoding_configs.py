@@ -36,6 +36,8 @@ P = {"Linf": None, "L1": 1, "L2": 2}
 # delta = 5 on its 0.001 degree grid (about 555 m north-south and 480 m east-west). The original
 # grid is not listed: it keeps using the configs in configs/unknown_dictionary.
 DELTAS = {
+    # The default Morton box has exactly Mosaic's 0.001 degree cells.
+    "morton": {"Linf": 5, "L1": 5, "L2": 5},
 }
 
 
