@@ -1,6 +1,6 @@
 //! Standard geohash, as integer cell indices inside a fixed prefix cell.
 
-use super::{Encoded, LocationEncoder};
+use super::{rect, Encoded, LocationEncoder};
 
 const BASE32: &[u8; 32] = b"0123456789bcdefghjkmnpqrstuvwxyz";
 
@@ -176,5 +176,17 @@ impl LocationEncoder for Geohash {
 
     fn label(&self, coords: &[u128]) -> String {
         bits_to_base32(&self.full_bits(coords[0], coords[1]))
+    }
+
+    fn region(&self, ranges: &[(u128, u128)]) -> Vec<Vec<(f64, f64)>> {
+        // Longitude has fewer bits than h1; indices past its last cell are never produced.
+        let lat_hi = ranges[0].1.min((1 << self.lat_bits()) - 1);
+        let lon_hi = ranges[1].1.min((1 << self.lon_bits()) - 1);
+        if ranges[0].0 > lat_hi || ranges[1].0 > lon_hi {
+            return vec![];
+        }
+        let ((south, _), (west, _)) = bits_to_box(&self.full_bits(ranges[0].0, ranges[1].0));
+        let ((_, north), (_, east)) = bits_to_box(&self.full_bits(lat_hi, lon_hi));
+        vec![rect((south, north), (west, east))]
     }
 }

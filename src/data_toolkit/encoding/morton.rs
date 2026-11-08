@@ -1,6 +1,6 @@
 //! Morton (Z-order) grid over a configurable bounding box.
 
-use super::{Encoded, LocationEncoder};
+use super::{rect, Encoded, LocationEncoder};
 
 /// Each axis of the box `[min, max)` is split into `2^axis_bits` equal cells, and a point is
 /// `[lat_idx, lon_idx]`. Mastic interleaves the two indices into one Morton code; Mosaic's crawl
@@ -61,8 +61,13 @@ impl Morton {
 
     /// Center of cell `idx` on the axis `[min, max)`.
     fn axis_center(&self, idx: u128, min: f64, max: f64) -> f64 {
+        self.axis_edge(idx as f64 + 0.5, min, max)
+    }
+
+    /// Position `idx` cells along the axis `[min, max)`.
+    fn axis_edge(&self, idx: f64, min: f64, max: f64) -> f64 {
         let cells = (1u64 << self.axis_bits) as f64;
-        min + (max - min) * (idx as f64 + 0.5) / cells
+        min + (max - min) * idx / cells
     }
 }
 
@@ -99,5 +104,19 @@ impl LocationEncoder for Morton {
 
     fn label(&self, coords: &[u128]) -> String {
         format!("morton ({} {})", coords[0], coords[1])
+    }
+
+    fn region(&self, ranges: &[(u128, u128)]) -> Vec<Vec<(f64, f64)>> {
+        let ((lat_lo, lat_hi), (lon_lo, lon_hi)) = (ranges[0], ranges[1]);
+        vec![rect(
+            (
+                self.axis_edge(lat_lo as f64, self.min_lat, self.max_lat),
+                self.axis_edge(lat_hi as f64 + 1.0, self.min_lat, self.max_lat),
+            ),
+            (
+                self.axis_edge(lon_lo as f64, self.min_lon, self.max_lon),
+                self.axis_edge(lon_hi as f64 + 1.0, self.min_lon, self.max_lon),
+            ),
+        )]
     }
 }

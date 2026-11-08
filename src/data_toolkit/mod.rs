@@ -1,3 +1,4 @@
+pub mod crawl;
 pub mod encoding;
 pub mod synthetic_data;
 

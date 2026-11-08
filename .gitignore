@@ -20,3 +20,7 @@ script
 *.log
 results.json
 configs/network_config.json
+# Crawl viewer: saved crawls and the single-file build
+viz/results/
+viz/dist/
+.DS_Store

@@ -662,6 +662,8 @@ The defaults `delta` = 4 / 8 / 5 give neighbourhoods of about 560 m, comparable 
 The crawl does not know that the third coordinate is `i - j`, so it also reports triples that are not cells: on the busiest day 5018 `Linf` heavy hitters, of which 445 are cells.
 `heavy_hitters_decoder` leaves the others out. They also make the crawl about 3 times longer (13953 prefixes instead of 4257 if the servers dropped every prefix that cannot contain a cell, which they could do from the public prefixes alone; this is not implemented).
 
+To see the crawl of every encoding side by side on a map, level by level, see the crawl viewer in [viz/README.md](viz/README.md) (`viz/run_crawls.sh busiest_day`).
+
 `mosaic_others ground-truth` writes the heavy hitters as integer points; `heavy_hitters_decoder` turns them back into cells and locations:
 ```bash
 cargo run --release --bin heavy_hitters_decoder -- \

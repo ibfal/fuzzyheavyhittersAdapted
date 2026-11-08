@@ -100,6 +100,10 @@ name = "ride_austin_json_sampler"
 path = "src/bin/data/ride_austin_json_sampler.rs"
 
 [[bin]]
+name = "crawl_exporter"
+path = "src/bin/data/crawl_exporter.rs"
+
+[[bin]]
 name = "heavy_hitters_decoder"
 path = "src/bin/data/heavy_hitters_decoder.rs"
 

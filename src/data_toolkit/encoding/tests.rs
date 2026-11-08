@@ -223,3 +223,59 @@ fn h3_round_trips_and_rejects_non_cells() {
     assert_eq!(h3.encode(FAR_AWAY.0, FAR_AWAY.1), Encoded::Dropped);
     assert_eq!(h3.encode(f64::NAN, 0.0), Encoded::Dropped);
 }
+
+/// Bounding box `((min_lat, max_lat), (min_lon, max_lon))` of polygons.
+fn bbox(polygons: &[Vec<(f64, f64)>]) -> ((f64, f64), (f64, f64)) {
+    let pts = polygons.iter().flatten();
+    let lats = pts.clone().map(|p| p.0);
+    let lons = pts.map(|p| p.1);
+    (
+        (lats.clone().fold(f64::MAX, f64::min), lats.fold(f64::MIN, f64::max)),
+        (lons.clone().fold(f64::MAX, f64::min), lons.fold(f64::MIN, f64::max)),
+    )
+}
+
+/// The region of a single cell contains its center, and the region of a box contains both its
+/// corner cells.
+fn assert_regions(encoder: &dyn LocationEncoder, (lat, lon): (f64, f64), cell_size: (f64, f64)) {
+    let c = coords(encoder.encode(lat, lon));
+    let one: Vec<(u128, u128)> = c.iter().map(|&v| (v, v)).collect();
+    let ((s, n), (w, e)) = bbox(&encoder.region(&one));
+    let (clat, clon) = encoder.decode(&c).unwrap();
+    assert!(s < clat && clat < n && w < clon && clon < e, "center outside its region");
+    assert!(((n - s) - cell_size.0).abs() < 1e-6, "cell height {}", n - s);
+    assert!(((e - w) - cell_size.1).abs() < 1e-6, "cell width {}", e - w);
+}
+
+#[test]
+fn rectangular_regions_are_the_cells() {
+    assert_regions(&MosaicGrid, DOWNTOWN, (0.001, 0.001));
+    assert_regions(&default_morton(), DOWNTOWN, (0.001, 0.001));
+    assert_regions(&Geohash::new("9v6", 21), DOWNTOWN, (180.0 / (1u64 << 18) as f64, 360.0 / (1u64 << 18) as f64));
+    // The whole coordinate range is clipped to the cells that exist.
+    let ((s, n), _) = bbox(&MosaicGrid.region(&[(0, 2047), (0, 2047)]));
+    assert!((s - 29.2665).abs() < 1e-9 && (n - 31.2665).abs() < 1e-9);
+    assert!(MosaicGrid.region(&[(2000, 2047), (0, 2047)]).is_empty());
+    assert!(Geohash::new("9v6", 21).region(&[(0, 2047), (1024, 2047)]).is_empty());
+}
+
+#[test]
+fn h3_regions_are_hexagons_or_outlines() {
+    let h3 = default_h3();
+    let c = coords(h3.encode(AIRPORT.0, AIRPORT.1));
+    let one: Vec<(u128, u128)> = c.iter().map(|&v| (v, v)).collect();
+    let region = h3.region(&one);
+    assert_eq!(region.len(), 1);
+    assert_eq!(region[0].len(), 6, "a hexagon");
+    let ((s, n), (w, e)) = bbox(&region);
+    let (lat, lon) = h3.decode(&c).unwrap();
+    assert!(s < lat && lat < n && w < lon && lon < e);
+    // A box with no i - j in range has no cells.
+    assert!(h3.region(&[(1024, 1024), (1024, 1024), (1030, 1035)]).is_empty());
+    // A large box is one outline that contains its cells' centers.
+    let big = h3.region(&[(1000, 1100), (1000, 1100), (900, 1100)]);
+    assert_eq!(big.len(), 1);
+    let ((s, n), (w, e)) = bbox(&big);
+    let (lat, lon) = h3.decode(&[1050, 1050, 1024]).unwrap();
+    assert!(s < lat && lat < n && w < lon && lon < e);
+}

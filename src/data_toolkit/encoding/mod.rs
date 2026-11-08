@@ -120,6 +120,21 @@ pub trait LocationEncoder {
 
     /// Human-readable name of the cell named by `coords`.
     fn label(&self, coords: &[u128]) -> String;
+
+    /// Outline of the cells whose coordinates lie in `ranges` (one inclusive `(lo, hi)` per
+    /// coordinate), as polygons of `(lat, lon)` vertices. This is the area a prefix of the crawl
+    /// stands for; empty if no location encodes to it.
+    fn region(&self, ranges: &[(u128, u128)]) -> Vec<Vec<(f64, f64)>>;
+}
+
+/// Rectangle with the given `(min, max)` latitude and longitude.
+pub(crate) fn rect((lat_lo, lat_hi): (f64, f64), (lon_lo, lon_hi): (f64, f64)) -> Vec<(f64, f64)> {
+    vec![
+        (lat_lo, lon_lo),
+        (lat_lo, lon_hi),
+        (lat_hi, lon_hi),
+        (lat_hi, lon_lo),
+    ]
 }
 
 /// Which locations of a ride become the client point.

@@ -1,6 +1,6 @@
 //! Mosaic's original RideAustin grid.
 
-use super::{Encoded, LocationEncoder};
+use super::{rect, Encoded, LocationEncoder};
 use crate::data_toolkit::{geo_to_grid, grid_to_geo, LAT_BITS, LAT_GRID_SIZE, LON_GRID_SIZE};
 use crate::data_toolkit::{AUSTIN_MIN_LAT, AUSTIN_MIN_LON, DECIMAL_SCALE};
 
@@ -49,5 +49,28 @@ impl LocationEncoder for MosaicGrid {
 
     fn label(&self, coords: &[u128]) -> String {
         format!("grid ({}, {})", coords[0], coords[1])
+    }
+
+    fn region(&self, ranges: &[(u128, u128)]) -> Vec<Vec<(f64, f64)>> {
+        // Cell i holds the points that round to i, so it spans i - 0.5 to i + 0.5. Indices past
+        // the last cell are never produced.
+        let (lat_hi, lon_hi) = (
+            ranges[0].1.min(LAT_GRID_SIZE as u128 - 1),
+            ranges[1].1.min(LON_GRID_SIZE as u128 - 1),
+        );
+        if ranges[0].0 > lat_hi || ranges[1].0 > lon_hi {
+            return vec![];
+        }
+        let edge = |min: f64, i: f64| min + i / DECIMAL_SCALE as f64;
+        vec![rect(
+            (
+                edge(AUSTIN_MIN_LAT, ranges[0].0 as f64 - 0.5),
+                edge(AUSTIN_MIN_LAT, lat_hi as f64 + 0.5),
+            ),
+            (
+                edge(AUSTIN_MIN_LON, ranges[1].0 as f64 - 0.5),
+                edge(AUSTIN_MIN_LON, lon_hi as f64 + 0.5),
+            ),
+        )]
     }
 }

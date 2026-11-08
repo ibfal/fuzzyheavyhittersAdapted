@@ -31,7 +31,13 @@ pub struct H3 {
     /// The origin's own local IJ coordinates.
     origin_ij: (i64, i64),
     axis_bits: usize,
+    /// Center of the origin cell and the steps to the centers of its `+i` and `+j` neighbours,
+    /// in degrees, for drawing regions too large to draw cell by cell.
+    plane: [(f64, f64); 3],
 }
+
+/// Regions with at most this many cells are drawn as their hexagons.
+const MAX_DRAWN_CELLS: i64 = 64;
 
 impl H3 {
     pub fn new(resolution: u8, origin_lat: f64, origin_lon: f64, axis_bits: usize) -> Self {
@@ -50,11 +56,33 @@ impl H3 {
         let ij = origin
             .to_local_ij(origin)
             .unwrap_or_else(|e| panic!("no local IJ for the H3 origin {}: {}", origin, e));
-        Self {
+        let mut h3 = Self {
             origin,
             origin_ij: (ij.coord.i as i64, ij.coord.j as i64),
             axis_bits,
-        }
+            plane: [(0.0, 0.0); 3],
+        };
+        let center = |i, j| {
+            let c = LatLng::from(h3.cell_at(i, j).expect("the origin's neighbours are cells"));
+            (c.lat(), c.lng())
+        };
+        let (c0, ci, cj) = (center(0, 0), center(1, 0), center(0, 1));
+        h3.plane = [c0, (ci.0 - c0.0, ci.1 - c0.1), (cj.0 - c0.0, cj.1 - c0.1)];
+        h3
+    }
+
+    /// `(lat, lon)` of the point `(i, j)` of the plane, by the steps between the origin's
+    /// neighbours. Close to the cell centers near the origin; only used for large regions.
+    fn plane_point(&self, i: f64, j: f64) -> (f64, f64) {
+        let [c0, di, dj] = self.plane;
+        (c0.0 + i * di.0 + j * dj.0, c0.1 + i * di.1 + j * dj.1)
+    }
+
+    /// The cell at `(i, j)` relative to the origin.
+    fn cell_at(&self, i: i64, j: i64) -> Option<CellIndex> {
+        let (i, j) = (i + self.origin_ij.0, j + self.origin_ij.1);
+        let coord = CoordIJ::new(i32::try_from(i).ok()?, i32::try_from(j).ok()?);
+        CellIndex::try_from(LocalIJ::new(self.origin, coord)).ok()
     }
 
     fn offset(&self) -> i64 {
@@ -87,10 +115,25 @@ impl H3 {
         if c - o != i - j {
             return None;
         }
-        let (i, j) = (i + self.origin_ij.0, j + self.origin_ij.1);
-        let coord = CoordIJ::new(i32::try_from(i).ok()?, i32::try_from(j).ok()?);
-        CellIndex::try_from(LocalIJ::new(self.origin, coord)).ok()
+        self.cell_at(i, j)
     }
+}
+
+/// Clip a convex polygon to the half-plane `f(p) >= 0`, where `f` is affine.
+fn clip(polygon: &[(f64, f64)], f: impl Fn((f64, f64)) -> f64) -> Vec<(f64, f64)> {
+    let mut out = Vec::new();
+    for (k, &p) in polygon.iter().enumerate() {
+        let q = polygon[(k + 1) % polygon.len()];
+        let (fp, fq) = (f(p), f(q));
+        if fp >= 0.0 {
+            out.push(p);
+        }
+        if (fp >= 0.0) != (fq >= 0.0) {
+            let t = fp / (fp - fq);
+            out.push((p.0 + t * (q.0 - p.0), p.1 + t * (q.1 - p.1)));
+        }
+    }
+    out
 }
 
 impl LocationEncoder for H3 {
@@ -127,5 +170,45 @@ impl LocationEncoder for H3 {
             Some(cell) => cell.to_string(),
             None => format!("not a cell ({} {} {})", coords[0], coords[1], coords[2]),
         }
+    }
+
+    fn region(&self, ranges: &[(u128, u128)]) -> Vec<Vec<(f64, f64)>> {
+        let o = self.offset();
+        let shift = |(lo, hi): (u128, u128)| (lo as i64 - o, hi as i64 - o);
+        let ((i0, i1), (j0, j1), (k0, k1)) = (shift(ranges[0]), shift(ranges[1]), shift(ranges[2]));
+
+        // The cells are the (i, j) in the box with i - j in [k0, k1].
+        let j_range = |i: i64| (j0.max(i - k1), j1.min(i - k0));
+        let mut cells = 0;
+        for i in i0..=i1 {
+            let (lo, hi) = j_range(i);
+            cells += (hi - lo + 1).max(0);
+            if cells > MAX_DRAWN_CELLS {
+                break;
+            }
+        }
+        if cells == 0 {
+            return vec![];
+        }
+        if cells <= MAX_DRAWN_CELLS {
+            let mut hexagons = Vec::new();
+            for i in i0..=i1 {
+                let (lo, hi) = j_range(i);
+                for j in lo..=hi {
+                    if let Some(cell) = self.cell_at(i, j) {
+                        hexagons.push(cell.boundary().iter().map(|v| (v.lat(), v.lng())).collect());
+                    }
+                }
+            }
+            return hexagons;
+        }
+
+        // Too many cells to draw: the box in the (i, j) plane, half a cell wider on every side,
+        // cut by the two limits on i - j.
+        let (a0, a1, b0, b1) = (i0 as f64 - 0.5, i1 as f64 + 0.5, j0 as f64 - 0.5, j1 as f64 + 0.5);
+        let mut polygon = vec![(a0, b0), (a1, b0), (a1, b1), (a0, b1)];
+        polygon = clip(&polygon, |(i, j)| (i - j) - (k0 as f64 - 0.5));
+        polygon = clip(&polygon, |(i, j)| (k1 as f64 + 0.5) - (i - j));
+        vec![polygon.into_iter().map(|(i, j)| self.plane_point(i, j)).collect()]
     }
 }
