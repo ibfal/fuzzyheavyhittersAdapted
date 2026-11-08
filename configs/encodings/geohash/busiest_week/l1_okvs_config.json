@@ -1,0 +1,24 @@
+{
+  "data_file": "data/encodings/geohash/start_busiest_week.json",
+  "query_file": "data/encodings/geohash/start_busiest_week.json",
+  "protocol": {
+    "delta": 5,
+    "match_threshold": 1180,
+    "enable_sketch": false,
+    "h1": 11,
+    "h2": 59,
+    "h3": 16,
+    "d": 2,
+    "share_method": "OKVS",
+    "dictionary_type": "Unknown",
+    "check_property": "MuBounded",
+    "distance_metric": "L1",
+    "num_clients": 59040,
+    "sketch_modulus": 892270022585185806328177
+  },
+  "output": {
+    "verbose": true,
+    "show_intermediate": false,
+    "output_file": "results.json"
+  }
+}

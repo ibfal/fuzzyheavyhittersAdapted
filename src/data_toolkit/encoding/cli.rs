@@ -10,6 +10,8 @@ pub enum EncodingName {
     MosaicGrid,
     /// A uniform grid over the `--morton-*` box; points outside are dropped.
     Morton,
+    /// Geohash cells inside `--geohash-prefix`; points outside are dropped.
+    Geohash,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -33,6 +35,13 @@ pub struct EncodingArgs {
     /// Morton cells per axis, as a power of two (the config's h1).
     #[arg(long, default_value_t = 10)]
     pub morton_axis_bits: usize,
+
+    /// Geohash cell (base32) that contains every ride; its bits are not sent.
+    #[arg(long, default_value = "9v6")]
+    pub geohash_prefix: String,
+    /// Geohash bits below the prefix, split into latitude and longitude indices.
+    #[arg(long, default_value_t = 21)]
+    pub geohash_bits: usize,
 }
 
 impl EncodingArgs {
@@ -45,6 +54,10 @@ impl EncodingArgs {
                 min_lon: self.morton_min_lon,
                 max_lon: self.morton_max_lon,
                 axis_bits: self.morton_axis_bits,
+            },
+            EncodingName::Geohash => Encoding::Geohash {
+                prefix: self.geohash_prefix.clone(),
+                bits: self.geohash_bits,
             },
         }
     }

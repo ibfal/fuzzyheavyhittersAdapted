@@ -622,6 +622,7 @@ The protocol itself does not change, only `d` (coordinates per point), `h1` (bit
 | --- | --- | --- | --- | --- |
 | `mosaic-grid` (default) | `[lat, lon]` on the original 0.001 degree grid | 2, 11 | clamped to the edge | 5 / 5 / 5 |
 | `morton` | `[lat, lon]` cell indices in the `--morton-*` box, `2^axis_bits` cells per axis | 2, `axis_bits` (default 10) | dropped | 5 / 5 / 5 |
+| `geohash` | `[lat, lon]` indices from the `--geohash-bits` bits below `--geohash-prefix` (default 21 below `9v6`) | 2, 11 | dropped | 5 / 5 / 5 |
 
 Next to the points, the generator writes `<output>.encoding.json` with the encoding, `d`, `h1` and how many rides were kept, clamped and dropped.
 A dropped ride is not sent, so `num_clients` and the 2% `match_threshold` come from the kept rides.
@@ -646,6 +647,11 @@ Without `ENCODING` (or with `ENCODING=mosaic_grid`), `run_exp.sh` runs `configs/
 The default box (29.9005 to 30.9245, -98.0505 to -97.0265, 10 bits per axis) puts the cell edges half a step off the 3-decimal RideAustin coordinates, so its cells are exactly Mosaic's grid cells shifted by (634, 693), with one bit less per coordinate.
 Its heavy hitters are the `mosaic-grid` ones shifted by the same amount (916 / 426 / 598 on the busiest day), and no rides are dropped.
 Other cell sizes, such as Mastic's `morton-h3res10-area` box (`--morton-max-lat 31.199435808 --morton-max-lon -96.751564192`), only need different `--morton-*` flags.
+
+**Geohash.** Geohash cells form a uniform grid, so the bits below the prefix are split by position into a latitude and a longitude index.
+All of Austin lies in `9v6` (15 bits); the 21 bits below it give 11 latitude and 10 longitude bits, and cells of 0.000687 by 0.001373 degrees (about 76 m by 132 m, the closest geohash area to Mosaic's cells).
+Mosaic uses one `delta` for every coordinate, so on these cells the neighbourhood is about 1.7 times wider east-west than north-south; an odd number of bits below `9v6` (e.g. `--geohash-bits 20`) gives cells that are square in degrees, like Mosaic's.
+On the busiest day it finds 891 / 399 / 525 heavy hitters with no rides dropped.
 
 `mosaic_others ground-truth` writes the heavy hitters as integer points; `heavy_hitters_decoder` turns them back into cells and locations:
 ```bash

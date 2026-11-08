@@ -38,6 +38,8 @@ P = {"Linf": None, "L1": 1, "L2": 2}
 DELTAS = {
     # The default Morton box has exactly Mosaic's 0.001 degree cells.
     "morton": {"Linf": 5, "L1": 5, "L2": 5},
+    # 76 m x 132 m cells: delta = 5 is about 380 m north-south and 660 m east-west.
+    "geohash": {"Linf": 5, "L1": 5, "L2": 5},
 }
 
 

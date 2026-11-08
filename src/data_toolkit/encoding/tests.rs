@@ -119,3 +119,35 @@ fn morton_encoding_parses_from_metadata_json() {
     assert_eq!(encoding.encoder().axis_bits(), 10);
     assert_eq!(encoding.name(), "morton");
 }
+
+#[test]
+fn geohash_matches_reference_geohashes() {
+    // The Wikipedia example, and Austin cells checked with exact rational arithmetic (the airport
+    // is the cell in Mastic's syn-geohash.log).
+    let base32 = |lat, lon, n| geohash::bits_to_base32(&geohash::point_to_bits(lat, lon, n));
+    assert_eq!(base32(57.64911, 10.40744, 55), "u4pruydqqvj");
+    assert_eq!(base32(DOWNTOWN.0, DOWNTOWN.1, 35), "9v6kpvc");
+    assert_eq!(base32(AIRPORT.0, AIRPORT.1, 35), "9v6ec91");
+    assert_eq!(geohash::bits_to_base32(&geohash::base32_to_bits("9v6")), "9v6");
+}
+
+#[test]
+fn geohash_splits_the_bits_after_the_prefix_into_lat_and_lon() {
+    let gh = Geohash::new("9v6", 21);
+    assert_eq!((gh.dims(), gh.axis_bits()), (2, 11));
+    for p in [DOWNTOWN, AIRPORT, (30.4012, -97.7254)] {
+        assert_round_trip(&gh, p);
+        let c = coords(gh.encode(p.0, p.1));
+        assert!(c[1] < 1 << 10, "longitude has 10 bits: {:?}", c);
+        // The label is the standard 36-bit geohash of the point (7 characters and a bit).
+        let full = geohash::point_to_bits(p.0, p.1, 36);
+        assert_eq!(gh.label(&c), geohash::bits_to_base32(&full));
+    }
+    // Neighbouring cells differ by one in one coordinate: 0.000687 degrees north, 0.001373 east.
+    let c = coords(gh.encode(DOWNTOWN.0, DOWNTOWN.1));
+    let (lat, lon) = gh.decode(&c).unwrap();
+    assert_eq!(coords(gh.encode(lat + 0.000687, lon)), vec![c[0] + 1, c[1]]);
+    assert_eq!(coords(gh.encode(lat, lon + 0.001373)), vec![c[0], c[1] + 1]);
+    assert_eq!(gh.encode(FAR_AWAY.0, FAR_AWAY.1), Encoded::Dropped);
+    assert!(gh.decode(&[0, 1 << 10]).is_none());
+}

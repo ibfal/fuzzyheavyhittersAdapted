@@ -16,9 +16,11 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub mod cli;
+pub mod geohash;
 mod morton;
 mod mosaic_grid;
 
+pub use geohash::Geohash;
 pub use morton::Morton;
 pub use mosaic_grid::MosaicGrid;
 
@@ -40,6 +42,10 @@ pub enum Encoding {
         max_lon: f64,
         axis_bits: usize,
     },
+
+    /// Standard geohash cells inside the cell `prefix` (base32, e.g. "9v6" for Austin), `bits`
+    /// bits below it; points outside the prefix cell are dropped.
+    Geohash { prefix: String, bits: usize },
 }
 
 impl Encoding {
@@ -55,6 +61,7 @@ impl Encoding {
             } => Box::new(Morton::new(
                 *min_lat, *max_lat, *min_lon, *max_lon, *axis_bits,
             )),
+            Encoding::Geohash { prefix, bits } => Box::new(Geohash::new(prefix, *bits)),
         }
     }
 
@@ -63,6 +70,7 @@ impl Encoding {
         match self {
             Encoding::MosaicGrid => "mosaic_grid",
             Encoding::Morton { .. } => "morton",
+            Encoding::Geohash { .. } => "geohash",
         }
     }
 }
