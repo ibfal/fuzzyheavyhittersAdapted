@@ -1,0 +1,16 @@
+{
+  "encoding": {
+    "type": "h3",
+    "resolution": 10,
+    "origin_lat": 30.267,
+    "origin_lon": -97.743,
+    "axis_bits": 11
+  },
+  "point_kind": "start",
+  "d": 3,
+  "h1": 11,
+  "total_rides": 14387,
+  "kept_rides": 14387,
+  "clamped_rides": 0,
+  "dropped_rides": 0
+}

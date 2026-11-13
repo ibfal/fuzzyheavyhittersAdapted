@@ -1,0 +1,7 @@
+# Python packages for the bench scripts (Python 3.14; tested versions in the comments).
+#   python -m venv .venv
+#   .\.venv\Scripts\python.exe -m pip install -r bench\requirements.txt
+numpy>=2.0        # ground_truth.py: crawl and dense counts; tested with 2.5.4
+psutil>=5.9       # physical cores and RAM for the environment record (A8); tested with 7.2.2
+matplotlib>=3.8   # plots of evaluate.py (A10); tested with 3.11.2
+pytest>=8         # bench/tests (evaluate.py); tested with 9.2.0

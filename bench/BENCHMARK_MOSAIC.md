@@ -76,13 +76,13 @@ Both use T = max(1, ⌊τ·N⌋). Mastic is not run at τ = 0.02: no single grid
 | Parameter | Value (same in both systems) |
 |---|---|
 | Weight | constant: every ride is one vote |
-| Mosaic radius δ | **5** grid squares, L∞ (from Mosaic's `results.json`), i.e. an 11 × 11-square neighbourhood, about 1.2 km × 1.1 km |
+| Mosaic radius δ | **5** grid squares, L∞ (from Mosaic's `results.json`), i.e. an 11 × 11-square neighbourhood, about 1.2 km × 1.1 km. For H3, δ counts hexagon steps: δ = 5 (91 hexagons, ≈ 1.37 km²) is the main setting; δ = 4 (Mosaic's H3 default, 61 hexagons) is computed in the ground truth and run only if time allows |
 | `mosaic_grid` | origin (29.267, −98.743), 0.001° cells, 11 bits per axis, n = 22 |
 | `geohash` | prefix `9v6`, 21 bits, n = 21 (area-matched to the grid) |
 | `h3` | prefix `82489ffffffffff`, resolution 10, n = 24 (area-matched to the grid) |
 | `morton` | lat 29.9005–30.9245, lon −98.0505 to −97.0265, 10 bits per axis, n = 20 |
 
-If an encoding uses different parameters in either codebase, align them before benchmarking.
+If an encoding uses different parameters in either codebase, align them before benchmarking. What must be identical are the **cells**. The number of crawl levels n may differ between the two implementations, because they represent the same cells differently (Mosaic: geohash n = 22, with one dummy longitude level; H3 n = 23, from 2 × 11 levels on two cube coordinates plus one final check of the derived third coordinate). Each result line records its own n in `params.data_bits`.
 
 ## A3. Phases
 
@@ -219,6 +219,13 @@ One JSON object per line in `bench/results/raw/<system>.jsonl`, where `system` i
 }
 ```
 
+Additions (spec v3.1, needed for Mosaic; existing Mastic lines stay valid):
+
+- **`server_to_server`** may be a single number (Mastic: `0`) or `[sent by server0, sent by server1]`. Links are full duplex, so the network model's `max_link` uses the **larger direction**; totals use the sum.
+- **`output[].count`** may be `null` when a system doesn't reveal counts (Mosaic). The self-check then compares the sets of reported locations only.
+- **`output[].lat` / `lon`** may be `null` for outputs that are not real cells (Mosaic's H3 crawl also outputs coordinate triples that are not H3 cells). Those don't count as `outputs` in A5.
+- **`extra`** (optional object) holds system-specific values that have no field of their own, e.g. `{"h3_noncell_outputs": 4573, "dealer_bytes": 120, "channel_buffer_bytes": 67108864}`. The schema check only requires it to be an object. Its values are shown in `tables.md`, not in the summary columns.
+
 The client micro-benchmark writes the same header fields plus the following to `bench/results/raw/<system>_client.jsonl`:
 
 ```json
@@ -291,15 +298,25 @@ The client micro-benchmark writes the same header fields plus the following to `
 
 ## B3. How the phases map onto the Mosaic code
 
-*(Filled in after prompt 1.)*
+*(Filled in by prompt 1, at commit 5623af8.)* Every run uses:
+- FSS client shares; garbled circuits for the distance check and for the threshold comparison (`configs/method/gc_gc.json`);
+- sketch verification on; L∞; unknown dictionary;
+- 5 threads per server (A8).
+
+Four processes run on localhost:
+- `server0` and `server1`;
+- the client simulator, which plays all N clients;
+- the dealer, which the servers always connect to (`mosaic_server.rs:81-98`).
+
+There is no collector: both servers end with the output.
 
 | Metric | Mosaic code |
 |---|---|
-| Client report generation | ⟨…⟩ |
-| Server offline | ⟨… or 0⟩ |
-| Upload | ⟨…⟩ |
-| Online | ⟨…⟩ |
-| Online steps | ⟨…⟩ |
+| Client report generation | Per client:<br>• `SharePhase::share_range`: one interval-FSS key pair per coordinate (`share_phase.rs:35-126`, `share_phase_helper.rs:151-207`), serialised with `SharedRange::to_bytes` (`client.rs:99-101`)<br>• d sketch-data pairs, the client's correlated randomness for the servers' key check (`client.rs:146-160`, `sketch_phase.rs:67`), serialised with `SketchData::to_bytes` (`client.rs:185-187`)<br>H3 clients send keys for all three coordinates. The simulator does all N clients in one loop (`mosaic_client.rs:93-101,121-127`). A6 needs a per-client timing binary (prompt 2): `src/bin/benchmarks/client_benchmark.rs` times a batch of 1,024 random points without sketch data. |
+| Server offline | **0.** Nothing is precomputed. The OT and garbled-circuit setup doesn't depend on client data, but runs inline for every candidate prefix, so it is part of online:<br>• `Garbler::new` / `Evaluator::new` at `batch_equality_full.rs:33-37,98-99` and `greater_than_or_equal_threshold.rs:64-65,160-161`<br>• `OtSender/OtReceiver::init` at `check_phase.rs:478-496`<br>• the per-candidate loop at `protocol.rs:895-948`<br>The dealer pre-generates FSS keys (`dealer.rs:403-418`), but gc_gc never requests them: the dealer only receives `Shutdown` (`protocol.rs:755-757,1386-1400`). |
+| Upload | The client simulator sends each server two messages without waiting for replies:<br>• all key shares (`client.rs:87-131` → `protocol.rs:81-114`, `mosaic_server.rs:225-227`)<br>• then all sketch data (`client.rs:167-228` → `protocol.rs:116-159`, `mosaic_server.rs:233-246`)<br>Upload runs from the first byte sent until both servers have stored the sketch data. The client's sketch-data generation between the two sends (`mosaic_client.rs:121-127`) is not counted. `rounds.upload` = 1. |
+| Online | From "all reports stored" (`mosaic_server.rs:246`) until both servers return from `run_server_unknown_dictionary_parallel2` (`mosaic_server.rs:341-345`, `protocol.rs:559-760`). It includes the sketch verification of the client keys (`mosaic_server.rs:248-299`), as Mastic's online includes its FLP check. The existing timer (`mosaic_server.rs:303`) starts after the verification and is not used. |
+| Online steps | • `sketch_verify` (`protocol.rs:161-281`)<br>• summed over the crawl's iterations:<br>&nbsp;&nbsp;– `expand`: FSS prefix expansion and evaluation (`protocol.rs:610-693`)<br>&nbsp;&nbsp;– `check_threshold`: per thread, one GC equality test plus one OT boolean-to-arithmetic conversion per candidate, then one GC ≥ T per chunk (`protocol.rs:883-992`)<br>&nbsp;&nbsp;– `reveal`: exchange of the result-bit shares (`protocol.rs:994-1073`)<br>• for H3 also `derived_check` (`protocol.rs:733-740,768-840`)<br>The crawl isn't level-synchronous: each iteration expands the last ≤ 4·threads frontier states (`protocol.rs:583,605-608`), so there are no per-level times. Per-level counts (A7) come from tagging each state with its level. |
 
 ## B4. Accuracy in Mosaic
 
@@ -310,17 +327,38 @@ The client micro-benchmark writes the same header fields plus the following to `
 
 ## B5. Leakage in Mosaic (starting list for `LEAKAGE_mosaic.md`)
 
-To be filled from the code and the thesis. Check at least:
+*(Filled in by prompt 1 from the code at commit 5623af8. Paper sections are added in the leakage prompt.)*
 
-1. **Intended output:** the hotspots, and whether their counts are revealed or only that they are above the threshold.
+1. **Intended output:** the qualifying points (squares or cells), learnt by **both servers**.
+   - There is no separate collector: the result bits are exchanged between the servers (`protocol.rs:994-1073`), and both return the points (`protocol.rs:742-753`).
+   - **Counts are not revealed.** Each client's match bit is turned into an additive share (`check_phase.rs:437-508`), the shares are summed locally (`threshold_phase.rs:32-42`), and the sum is only compared with T inside a garbled circuit (`greater_than_or_equal_threshold.rs:210-276`).
+   - In A9, `output[].count` is `null`.
 2. **Protocol leakage:**
-   - what is opened during the search (counts per candidate or prefix, or only above/below-threshold bits from the garbled-circuit comparison);
-   - how many values are opened per level;
-   - public parameters (N, T, δ, grid size).
-3. **Revealed for verification:** any per-client validity results.
-4. **Security model:** semi-honest servers vs. malicious clients. State it next to the leakage, because it differs from Mastic.
-5. **Implementation only:** deployment simplifications (e.g. all parties in one process, unencrypted channels, a single process playing several roles). Cite `file:line`.
-6. **Encoding effect:** what regions or points the opened values describe for each encoding. Use the measured number of revealed values per run.
+   - **What is opened:** one bit per checked prefix ("count ≥ T"), opened to both servers (`protocol.rs:994-1073`), so `revealed_kind` = `"bit"`. The count itself is never opened.
+   - **Bits per level:** the checked prefixes are the 2 children of every prefix kept at the level before (`protocol.rs:610-655`). So revealed bits per level = 2 × the previous frontier (2 at level 1).
+     - Levels: 22 (grid), 22 (geohash), 23 (H3), 20 (Morton).
+     - H3's last level checks each surviving point once, with its derived coordinate (`protocol.rs:768-840`).
+     - The kept prefixes (the frontier) are known to both servers.
+     - The ground truth's `candidates_per_level` / `frontier_per_level` give the expected numbers for every subset and τ.
+   - **Public parameters:** N (checked against the number of reports, `protocol.rs:101,138`), T (an absolute number in the config), δ, d, h1, h2, h3, the metric, the encoding parameters (including H3's `derived_coordinate`) and the sketch modulus.
+   - **Inside the circuits:** server1 garbles and server0 evaluates (`check_phase.rs:168-172`, `threshold_phase.rs:60-65`). The outputs are masked with the garbler's random bits (`batch_equality_full.rs:38-41,178`; `greater_than_or_equal_threshold.rs:67-70,267-270`), so neither server sees a per-client match bit.
+3. **Revealed for verification:** one accept/reject bit per client, to both servers. Both open the sketch verification values (`protocol.rs:242-275`) and drop flagged clients (`mosaic_server.rs:256-291`). `client_validity_bits` = N.
+4. **Security model:** this differs from Mastic.
+   - Two non-colluding **semi-honest** servers: `README.md:49-52`; `fancy_garbling::twopac::semihonest` in `batch_equality_full.rs:3-7` and `greater_than_or_equal_threshold.rs:5-10`; semi-honest ALSZ OT (`check_phase.rs:17`).
+   - **Malicious clients**, caught by the sketch verification (`README.md:327-336`, `protocol.rs:161-281`).
+   - The dealer (a third non-colluding party) is only used by the FSS check/threshold methods. With gc_gc it receives only a shutdown signal.
+5. **Implementation only:**
+   - All channels are plain TCP, without encryption or authentication (`channel.rs:72-103`). Anyone who sees both client links gets both FSS keys of every client, and with them its interval and location. Anyone who sees the server link sees the opened bits.
+   - One process plays all N clients and holds every location in plaintext (`mosaic_client.rs:86-100`).
+   - The servers derive the sketch-verification randomness from a fixed all-zero seed (`mosaic_server.rs:257-258`, "Change later, need to exchange seed between servers"). The challenge is public, so a malicious client could craft keys that pass.
+   - Both servers print how many clients were rejected (`mosaic_server.rs:270-276`).
+   - The dealer process must run even with gc_gc (`mosaic_server.rs:81-98`).
+   - The H3 crawl with `derived_coordinate` is this fork's change (commit 5623af8), not the authors' protocol. It opens bits for (i, j) boxes with the third coordinate unconstrained, plus one final bit per surviving point (`protocol.rs:584,630-631,768-840`).
+6. **Encoding effect:** an opened bit describes the box of all points that extend the prefix: 2^(h1−ℓ₀) × … × 2^(h1−ℓ_{d−1}) cells for ℓᵢ bits of coordinate i (`crawl.rs:56-64`).
+   - `mosaic_grid` / `morton`: rectangles of 0.001° squares. Morton is the grid shifted by (634, 693), so the regions are the same.
+   - `geohash`: rectangles of 76 m × 132 m cells. The level for the top longitude bit reveals nothing, because the longitude index has 10 bits but is crawled over h1 = 11.
+   - `h3`: levels 1–22 open bits for boxes in (i, j) with the third coordinate unconstrained (rhombus-shaped areas of the hexagon grid). Level 23 opens one bit per full point, checked against its hexagon neighbourhood. Boxes without a real cell are no longer opened (README, day, δ = 4: 2,577 prefixes instead of 13,952).
+   - Numbers per run: measured in prompt 2. Expected values are in `bench/ground_truth/*` (`candidates_per_level`).
 
 ## B6. Cost on a laptop, and the optional τ = 0.005 runs
 

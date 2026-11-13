@@ -1,0 +1,17 @@
+{
+  "encoding": {
+    "type": "morton",
+    "min_lat": 29.9005,
+    "max_lat": 30.9245,
+    "min_lon": -98.0505,
+    "max_lon": -97.0265,
+    "axis_bits": 10
+  },
+  "point_kind": "start",
+  "d": 2,
+  "h1": 10,
+  "total_rides": 165,
+  "kept_rides": 165,
+  "clamped_rides": 0,
+  "dropped_rides": 0
+}

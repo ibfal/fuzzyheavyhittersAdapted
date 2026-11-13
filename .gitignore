@@ -24,3 +24,7 @@ configs/network_config.json
 viz/results/
 viz/dist/
 .DS_Store
+# Benchmark harness: Python virtual environment and caches
+.venv/
+__pycache__/
+.pytest_cache/

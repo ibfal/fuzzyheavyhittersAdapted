@@ -1,0 +1,12 @@
+{
+  "encoding": {
+    "type": "mosaic_grid"
+  },
+  "point_kind": "start",
+  "d": 2,
+  "h1": 11,
+  "total_rides": 7194,
+  "kept_rides": 7194,
+  "clamped_rides": 0,
+  "dropped_rides": 0
+}

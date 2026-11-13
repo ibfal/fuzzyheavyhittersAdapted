@@ -1,0 +1,457 @@
+{
+ "generator": "target/release/ride_austin_json_generator (src/bin/data/ride_austin_json_generator.rs)",
+ "source_dir_check": {
+  "csv": "sample_busiest_day.csv",
+  "csv_sha256": "c53204d8bf1ba88e48a270bc898dfa6e747d0829173c43aa82ebe3fd30e98ee4",
+  "json": "start_busiest_day.json",
+  "json_sha256": "0304f49f7d48535c1e348f83ca040baa41f45df58277cf82b38e80ad519a6bed",
+  "points": 21581
+ },
+ "checks_passed": true,
+ "files": [
+  {
+   "encoding": "mosaic_grid",
+   "name": "day_1of3",
+   "path": "bench/data/encodings/mosaic_grid/day_1of3.json",
+   "metadata": "bench/data/encodings/mosaic_grid/day_1of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_1of3.csv",
+    "sha256": "1625ce335fd27067d5940bc8e89832bc2eb228804e9f2b4c464dc1946ea25be8",
+    "rows": 7194
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "mosaic-grid"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 7194,
+   "kept_rides": 7194,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "a5df61032803a5cc0879bdde15a1675c1fa8f258ccf919eb7f32ff934382392d",
+   "file_sha256": "18de225672129fbc1d241fd7cbc9175258a6f3433f053d89a3a5f72e85dd8426"
+  },
+  {
+   "encoding": "geohash",
+   "name": "day_1of3",
+   "path": "bench/data/encodings/geohash/day_1of3.json",
+   "metadata": "bench/data/encodings/geohash/day_1of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_1of3.csv",
+    "sha256": "1625ce335fd27067d5940bc8e89832bc2eb228804e9f2b4c464dc1946ea25be8",
+    "rows": 7194
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "geohash",
+    "--geohash-prefix=9v6",
+    "--geohash-bits=21"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 7194,
+   "kept_rides": 7194,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "2cc42e9c390699c1bfb5e2c8924b12fe2dd5c26e7faf8b0e95c616c1a25079e7",
+   "file_sha256": "a5ae84e87f8b85b6141b061e3a0d8a8d130084a7c66776832a97477f4bbe75bf"
+  },
+  {
+   "encoding": "h3",
+   "name": "day_1of3",
+   "path": "bench/data/encodings/h3/day_1of3.json",
+   "metadata": "bench/data/encodings/h3/day_1of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_1of3.csv",
+    "sha256": "1625ce335fd27067d5940bc8e89832bc2eb228804e9f2b4c464dc1946ea25be8",
+    "rows": 7194
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "h3",
+    "--h3-resolution=10",
+    "--h3-origin-lat=30.267",
+    "--h3-origin-lon=-97.743",
+    "--h3-axis-bits=11"
+   ],
+   "d": 3,
+   "h1": 11,
+   "total_rides": 7194,
+   "kept_rides": 7194,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "1d686c3fd53818cbf9befcf9cdf9858bf21b92c56f9586228e35186b175b7938",
+   "file_sha256": "87cd373c260c4eeeb486c9afade712f195f918cd6dbba1afdd15165602f9e87b"
+  },
+  {
+   "encoding": "morton",
+   "name": "day_1of3",
+   "path": "bench/data/encodings/morton/day_1of3.json",
+   "metadata": "bench/data/encodings/morton/day_1of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_1of3.csv",
+    "sha256": "1625ce335fd27067d5940bc8e89832bc2eb228804e9f2b4c464dc1946ea25be8",
+    "rows": 7194
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "morton",
+    "--morton-min-lat=29.9005",
+    "--morton-max-lat=30.9245",
+    "--morton-min-lon=-98.0505",
+    "--morton-max-lon=-97.0265",
+    "--morton-axis-bits=10"
+   ],
+   "d": 2,
+   "h1": 10,
+   "total_rides": 7194,
+   "kept_rides": 7194,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "f774e875d933ba14c8b0cacc018a1e8dca2b49c6e6e688ccd99c8409db28646e",
+   "file_sha256": "fea2bcb6a47d861efb6ba7a92f85707375242c3dc5145d6cf499b927923af494"
+  },
+  {
+   "encoding": "mosaic_grid",
+   "name": "day_2of3",
+   "path": "bench/data/encodings/mosaic_grid/day_2of3.json",
+   "metadata": "bench/data/encodings/mosaic_grid/day_2of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_2of3.csv",
+    "sha256": "3bc7057b1d76bb6565d42a14bcb4b40be9dfdcb0de2d5738af1f449747250739",
+    "rows": 14387
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "mosaic-grid"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 14387,
+   "kept_rides": 14387,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "e9f6d1f6ee2900bb22d8780f1ec57fe35128ebcbbe2d101cf882a574f72b5265",
+   "file_sha256": "bbbdaf02d337da55df56df20a47686a72749d4ec7217df10cac682addb3bcf4f"
+  },
+  {
+   "encoding": "geohash",
+   "name": "day_2of3",
+   "path": "bench/data/encodings/geohash/day_2of3.json",
+   "metadata": "bench/data/encodings/geohash/day_2of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_2of3.csv",
+    "sha256": "3bc7057b1d76bb6565d42a14bcb4b40be9dfdcb0de2d5738af1f449747250739",
+    "rows": 14387
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "geohash",
+    "--geohash-prefix=9v6",
+    "--geohash-bits=21"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 14387,
+   "kept_rides": 14387,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "91b45b14f9c1f164f56012337cb9ba21211b8bb8cafa64b01e392d22e8864268",
+   "file_sha256": "98ecc5aa82f755e751a0c0148a61add5c196b19de6467366e68d59e70fdc726e"
+  },
+  {
+   "encoding": "h3",
+   "name": "day_2of3",
+   "path": "bench/data/encodings/h3/day_2of3.json",
+   "metadata": "bench/data/encodings/h3/day_2of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_2of3.csv",
+    "sha256": "3bc7057b1d76bb6565d42a14bcb4b40be9dfdcb0de2d5738af1f449747250739",
+    "rows": 14387
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "h3",
+    "--h3-resolution=10",
+    "--h3-origin-lat=30.267",
+    "--h3-origin-lon=-97.743",
+    "--h3-axis-bits=11"
+   ],
+   "d": 3,
+   "h1": 11,
+   "total_rides": 14387,
+   "kept_rides": 14387,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "1d163fde06c2390551f3db07f1bef6765da48504119bbfddae6f13a654c0979e",
+   "file_sha256": "ed9c04a5302d7f9bae8032895573765edcf0734710ccc4582b570280fa2cfe74"
+  },
+  {
+   "encoding": "morton",
+   "name": "day_2of3",
+   "path": "bench/data/encodings/morton/day_2of3.json",
+   "metadata": "bench/data/encodings/morton/day_2of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_2of3.csv",
+    "sha256": "3bc7057b1d76bb6565d42a14bcb4b40be9dfdcb0de2d5738af1f449747250739",
+    "rows": 14387
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "morton",
+    "--morton-min-lat=29.9005",
+    "--morton-max-lat=30.9245",
+    "--morton-min-lon=-98.0505",
+    "--morton-max-lon=-97.0265",
+    "--morton-axis-bits=10"
+   ],
+   "d": 2,
+   "h1": 10,
+   "total_rides": 14387,
+   "kept_rides": 14387,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "3f970e1f74da60029292a3e3332146305ee9bfcdef87df6c2c23029ada9ccc3d",
+   "file_sha256": "17fb1181e6a7fec7f3affb1e2f5329144853bce5615388b9c9d97221f23233a8"
+  },
+  {
+   "encoding": "mosaic_grid",
+   "name": "day_3of3",
+   "path": "bench/data/encodings/mosaic_grid/day_3of3.json",
+   "metadata": "bench/data/encodings/mosaic_grid/day_3of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_3of3.csv",
+    "sha256": "5916ab4dc5e84bf164162c98a752bca8e4fe3987f0c34c4c33ad4fe225cb9be1",
+    "rows": 21581
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "mosaic-grid"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 21581,
+   "kept_rides": 21581,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "27aa9f8afa741fc34272264a950d234f9500b69d212481f5a1c096c92e9427d3",
+   "file_sha256": "c47c0e5c8c419e9820a8c267d80589cf19086ade95af9a25b9ccb88032aaf939"
+  },
+  {
+   "encoding": "geohash",
+   "name": "day_3of3",
+   "path": "bench/data/encodings/geohash/day_3of3.json",
+   "metadata": "bench/data/encodings/geohash/day_3of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_3of3.csv",
+    "sha256": "5916ab4dc5e84bf164162c98a752bca8e4fe3987f0c34c4c33ad4fe225cb9be1",
+    "rows": 21581
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "geohash",
+    "--geohash-prefix=9v6",
+    "--geohash-bits=21"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 21581,
+   "kept_rides": 21581,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "4d3ec837eb518afbb5e3a1764f1b2d964acbc9eb155adfd47dfd5ebe6b905cf4",
+   "file_sha256": "cf91607ece057d29a6ac5e7f9862066cbcefac1b6a8a07dfaf6f1bfd3cd6c7d7"
+  },
+  {
+   "encoding": "h3",
+   "name": "day_3of3",
+   "path": "bench/data/encodings/h3/day_3of3.json",
+   "metadata": "bench/data/encodings/h3/day_3of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_3of3.csv",
+    "sha256": "5916ab4dc5e84bf164162c98a752bca8e4fe3987f0c34c4c33ad4fe225cb9be1",
+    "rows": 21581
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "h3",
+    "--h3-resolution=10",
+    "--h3-origin-lat=30.267",
+    "--h3-origin-lon=-97.743",
+    "--h3-axis-bits=11"
+   ],
+   "d": 3,
+   "h1": 11,
+   "total_rides": 21581,
+   "kept_rides": 21581,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "5ff08a28ddacab2310459e52604ae79f14407e304389e447838007d0c98c4667",
+   "file_sha256": "8efae2a2b6e2aa2a3d0d9929d564a160e0f3318ac951b59cf31438d4355b7d26"
+  },
+  {
+   "encoding": "morton",
+   "name": "day_3of3",
+   "path": "bench/data/encodings/morton/day_3of3.json",
+   "metadata": "bench/data/encodings/morton/day_3of3.encoding.json",
+   "source": {
+    "path": "bench/data/day_3of3.csv",
+    "sha256": "5916ab4dc5e84bf164162c98a752bca8e4fe3987f0c34c4c33ad4fe225cb9be1",
+    "rows": 21581
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "morton",
+    "--morton-min-lat=29.9005",
+    "--morton-max-lat=30.9245",
+    "--morton-min-lon=-98.0505",
+    "--morton-max-lon=-97.0265",
+    "--morton-axis-bits=10"
+   ],
+   "d": 2,
+   "h1": 10,
+   "total_rides": 21581,
+   "kept_rides": 21581,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "65c63e4fdd8b22fb12721360522fb5a95d3e10034ee3b9e9b8045a1266beb148",
+   "file_sha256": "5f934204f04de2a5d88c0a4e4823039e2c30b850bc9640bd33db32f59ae948f2"
+  },
+  {
+   "encoding": "mosaic_grid",
+   "name": "ten_locations",
+   "path": "bench/data/encodings/mosaic_grid/ten_locations.json",
+   "metadata": "bench/data/encodings/mosaic_grid/ten_locations.encoding.json",
+   "source": {
+    "path": "bench/data/ten_locations.csv",
+    "sha256": "451d795496330baff733b93bdfafa5704c495179f1beab45151c2416b1a53e71",
+    "rows": 165
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "mosaic-grid"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 165,
+   "kept_rides": 165,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "7078894c7740f2195ef34a47a18d1fd8c43ce62af52525efeea415e1fb93d734",
+   "file_sha256": "cfc5c86f79277fd2e3e657f22042de2222725ee6c639ad9fe7299ddbd3a74b28"
+  },
+  {
+   "encoding": "geohash",
+   "name": "ten_locations",
+   "path": "bench/data/encodings/geohash/ten_locations.json",
+   "metadata": "bench/data/encodings/geohash/ten_locations.encoding.json",
+   "source": {
+    "path": "bench/data/ten_locations.csv",
+    "sha256": "451d795496330baff733b93bdfafa5704c495179f1beab45151c2416b1a53e71",
+    "rows": 165
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "geohash",
+    "--geohash-prefix=9v6",
+    "--geohash-bits=21"
+   ],
+   "d": 2,
+   "h1": 11,
+   "total_rides": 165,
+   "kept_rides": 165,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "fcb59539f20442c79989f758f40474cd90f53d6159c05868e7807f911f87ff4f",
+   "file_sha256": "278a1eae88f4344dd2c446fb69e07aff83750597cc3dc9db69a9e295a1370304"
+  },
+  {
+   "encoding": "h3",
+   "name": "ten_locations",
+   "path": "bench/data/encodings/h3/ten_locations.json",
+   "metadata": "bench/data/encodings/h3/ten_locations.encoding.json",
+   "source": {
+    "path": "bench/data/ten_locations.csv",
+    "sha256": "451d795496330baff733b93bdfafa5704c495179f1beab45151c2416b1a53e71",
+    "rows": 165
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "h3",
+    "--h3-resolution=10",
+    "--h3-origin-lat=30.267",
+    "--h3-origin-lon=-97.743",
+    "--h3-axis-bits=11"
+   ],
+   "d": 3,
+   "h1": 11,
+   "total_rides": 165,
+   "kept_rides": 165,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "f4096ac7e8e0ff5829c459b1010415818ad2ac7723c771b1b316fc3b6f78a312",
+   "file_sha256": "0367ee43dca8b350553d5061ea79dac360347fde26d458a3e2b3d71d3c54ed87"
+  },
+  {
+   "encoding": "morton",
+   "name": "ten_locations",
+   "path": "bench/data/encodings/morton/ten_locations.json",
+   "metadata": "bench/data/encodings/morton/ten_locations.encoding.json",
+   "source": {
+    "path": "bench/data/ten_locations.csv",
+    "sha256": "451d795496330baff733b93bdfafa5704c495179f1beab45151c2416b1a53e71",
+    "rows": 165
+   },
+   "generator_args": [
+    "--output-type",
+    "0",
+    "--encoding",
+    "morton",
+    "--morton-min-lat=29.9005",
+    "--morton-max-lat=30.9245",
+    "--morton-min-lon=-98.0505",
+    "--morton-max-lon=-97.0265",
+    "--morton-axis-bits=10"
+   ],
+   "d": 2,
+   "h1": 10,
+   "total_rides": 165,
+   "kept_rides": 165,
+   "clamped_rides": 0,
+   "dropped_rides": 0,
+   "points_sha256": "a0efe81bcc7e3d8fe2081becc85be63e8021d3d8c30667f78be0e55717be396f",
+   "file_sha256": "f46d37906b1d73a5fadd34c96256cf82dbcba746a27edd36082e28ff0bde3189"
+  }
+ ]
+}

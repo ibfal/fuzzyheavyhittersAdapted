@@ -1,0 +1,14 @@
+{
+  "encoding": {
+    "type": "geohash",
+    "prefix": "9v6",
+    "bits": 21
+  },
+  "point_kind": "start",
+  "d": 2,
+  "h1": 11,
+  "total_rides": 14387,
+  "kept_rides": 14387,
+  "clamped_rides": 0,
+  "dropped_rides": 0
+}
