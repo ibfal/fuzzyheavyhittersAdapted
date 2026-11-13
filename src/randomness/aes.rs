@@ -1,3 +1,5 @@
+// Only the unused SIMD helpers below need x86_64; the PRG itself uses the portable `aes` crate.
+#[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::{
     __m128i, _mm_add_epi64, _mm_set_epi64x, _mm_storeu_si128,
 };
@@ -90,12 +92,14 @@ impl FixedKeyPrgStream {
         self.count += 8;
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     #[allow(unused)]
     fn inc_be(v: __m128i) -> __m128i {
         unsafe { _mm_add_epi64(v, _mm_set_epi64x(1, 0)) }
     }
 
+    #[cfg(target_arch = "x86_64")]
     #[inline(always)]
     #[allow(unused)]
     fn store(val: __m128i, at: &mut [u8]) {
