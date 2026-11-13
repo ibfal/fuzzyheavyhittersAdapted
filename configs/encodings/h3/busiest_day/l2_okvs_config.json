@@ -14,7 +14,13 @@
     "check_property": "MuBounded",
     "distance_metric": "L2",
     "num_clients": 21581,
-    "sketch_modulus": 892270022585185806328177
+    "sketch_modulus": 892270022585185806328177,
+    "derived_coordinate": {
+      "index": 2,
+      "plus": 0,
+      "minus": 1,
+      "offset": 1024
+    }
   },
   "output": {
     "verbose": true,

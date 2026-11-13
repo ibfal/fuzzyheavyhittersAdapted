@@ -6,7 +6,10 @@
 use crate::{
     channel::CommTrackingChannel,
     data_structures::modp::{Modp, BarrettCtx},
-    configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
+    configs::{
+        cli_config::{DerivedCoordinate, ProtocolParameters},
+        method_config::MethodConfig,
+    },
     fuzzy_match::{
         dealer::{DealerSignal, SerializedDpfKeyBatch, SerializedFssKeyBatch},
         share_phase::SharePhase,
@@ -38,6 +41,8 @@ pub struct MosaicProtocol {
     enable_sketch: bool,
     num_clients: usize,
     match_threshold: u128,
+    /// See [`DerivedCoordinate`]: a coordinate the unknown-dictionary crawl does not branch on.
+    derived: Option<DerivedCoordinate>,
 }
 
 impl MosaicProtocol {
@@ -50,6 +55,12 @@ impl MosaicProtocol {
         num_clients: usize,
         match_threshold: u128,
     ) -> Self {
+        let derived = protocol_config.derived_coordinate;
+        if let Some(derived) = &derived {
+            derived
+                .validate(protocol_config.d)
+                .unwrap_or_else(|e| panic!("invalid protocol config: {}", e));
+        }
         let share_phase = SharePhase::new(protocol_config.clone());
         let check_phase = CheckPhase::new((protocol_config.clone(), method_config.clone()), role);
         let sketch_phase = SketchPhase::new(protocol_config.clone());
@@ -63,6 +74,7 @@ impl MosaicProtocol {
             enable_sketch,
             num_clients,
             match_threshold,
+            derived,
         }
     }
 
@@ -351,11 +363,12 @@ impl MosaicProtocol {
             .map_err(|e| e.to_string())?;
         let mut current_data = vec![empty_string_data];
         let mut current_prefixes: Vec<Vec<Vec<bool>>> = vec![vec![vec![]; dimension]];
+        let crawl_dims = DerivedCoordinate::crawl_dims(self.derived.as_ref(), dimension);
 
         // let num_threads = other_server_channels.len();
 
         for prefix_length in 1..=max_bit_length {
-            for dim in 0..dimension {
+            for &dim in &crawl_dims {
                 let start = std::time::Instant::now();
                 // let mut new_data: Vec<Vec<Vec<u8>>> = Vec::new();
                 // for (data, prefix) in current_data.iter().zip(current_prefixes.iter()) {
@@ -510,6 +523,15 @@ impl MosaicProtocol {
                 // println!("Exceed threshold results: {:?}", exceeds_threshold_results);
             }
         }
+        if self.derived.is_some() {
+            let leaves = current_prefixes.into_iter().zip(current_data).collect();
+            current_prefixes = self.check_derived_coordinate(
+                client_shares_list,
+                leaves,
+                signal_dealer_channels,
+                other_server_channels,
+            )?;
+        }
         let final_heavy_hitters = current_prefixes
             .into_iter()
             .map(|prefix| {
@@ -549,7 +571,8 @@ impl MosaicProtocol {
             data: Vec<Vec<u8>>,
             prefix: Vec<Vec<bool>>,
             prefix_length: usize,
-            dim: usize,
+            /// Position in `crawl_dims` of the coordinate that gets the next bit.
+            pos: usize,
         }
 
         let max_bit_length = self.h1();
@@ -558,6 +581,7 @@ impl MosaicProtocol {
         let eval_modulus = 1u128 << eval_len;
         let num_threads = other_server_channels.len().max(1);
         let expansion_window = (num_threads * 4).max(1);
+        let crawl_dims = DerivedCoordinate::crawl_dims(self.derived.as_ref(), dimension);
 
         let empty_string_data = client_shares_list
             .iter()
@@ -571,9 +595,12 @@ impl MosaicProtocol {
             data: empty_string_data,
             prefix: vec![vec![]; dimension],
             prefix_length: 0,
-            dim: 0,
+            pos: 0,
         }];
         let mut final_prefixes: Vec<Vec<Vec<bool>>> = Vec::new();
+        // With a derived coordinate the full points still need their final check, which uses
+        // their evaluations.
+        let mut final_states: Vec<(Vec<Vec<bool>>, Vec<Vec<u8>>)> = Vec::new();
 
         while !current_data.is_empty() {
             let start = std::time::Instant::now();
@@ -583,6 +610,7 @@ impl MosaicProtocol {
             let expanded_states = expand_states
                 .par_iter()
                 .map(|state| {
+                    let dim = crawl_dims[state.pos];
                     let mut data0 = Vec::with_capacity(client_shares_list.len());
                     let mut data1 = Vec::with_capacity(client_shares_list.len());
                     for (idx, shared_range) in client_shares_list.iter().enumerate() {
@@ -592,33 +620,33 @@ impl MosaicProtocol {
 
                         let (eval0, eval1) = self
                             .share_phase
-                            .expand_prefix(shared_range, &data_dim, &state.prefix[state.dim], state.dim)
+                            .expand_prefix(shared_range, &data_dim, &state.prefix[dim], dim)
                             .map_err(|e| e.to_string())?;
 
                         data0.push(eval0.to_bytes(eval_len).map_err(|e| e.to_string())?);
                         data1.push(eval1.to_bytes(eval_len).map_err(|e| e.to_string())?);
                     }
 
-                    let next_dim = (state.dim + 1) % dimension;
-                    let next_prefix_length = state.prefix_length + usize::from(next_dim == 0);
+                    let next_pos = (state.pos + 1) % crawl_dims.len();
+                    let next_prefix_length = state.prefix_length + usize::from(next_pos == 0);
 
                     let mut prefix0 = state.prefix.clone();
-                    prefix0[state.dim].push(false);
+                    prefix0[dim].push(false);
                     let mut prefix1 = state.prefix.clone();
-                    prefix1[state.dim].push(true);
+                    prefix1[dim].push(true);
 
                     Ok::<_, String>([
                         TraversalState {
                             data: data0,
                             prefix: prefix0,
                             prefix_length: next_prefix_length,
-                            dim: next_dim,
+                            pos: next_pos,
                         },
                         TraversalState {
                             data: data1,
                             prefix: prefix1,
                             prefix_length: next_prefix_length,
-                            dim: next_dim,
+                            pos: next_pos,
                         },
                     ])
                 })
@@ -676,13 +704,20 @@ impl MosaicProtocol {
                 }
 
                 if state.prefix_length == max_bit_length {
-                    final_prefixes.push(std::mem::take(&mut state.prefix));
+                    if self.derived.is_some() {
+                        final_states.push((
+                            std::mem::take(&mut state.prefix),
+                            std::mem::take(&mut state.data),
+                        ));
+                    } else {
+                        final_prefixes.push(std::mem::take(&mut state.prefix));
+                    }
                 } else {
                     current_data.push(TraversalState {
                         data: std::mem::take(&mut state.data),
                         prefix: std::mem::take(&mut state.prefix),
                         prefix_length: state.prefix_length,
-                        dim: state.dim,
+                        pos: state.pos,
                     });
                 }
             }
@@ -690,9 +725,18 @@ impl MosaicProtocol {
             println!(
                 "Processed frontier chunk with {} survivors and {} finals in {:?}",
                 current_data.len(),
-                final_prefixes.len(),
+                final_prefixes.len() + final_states.len(),
                 start.elapsed()
             );
+        }
+
+        if self.derived.is_some() {
+            final_prefixes = self.check_derived_coordinate(
+                client_shares_list,
+                final_states,
+                signal_dealer_channels,
+                other_server_channels,
+            )?;
         }
 
         let final_heavy_hitters = final_prefixes
@@ -713,6 +757,86 @@ impl MosaicProtocol {
         }
 
         Ok(final_heavy_hitters)
+    }
+
+    /// Last step of a crawl that skipped the derived coordinate. Every leaf is a full point on
+    /// the crawled coordinates; set its derived coordinate to the only possible value, evaluate
+    /// the clients' keys there, and keep the points that are still heavy hitters with every
+    /// coordinate checked. Leaves whose derived value does not fit in `h1` bits are dropped:
+    /// no client point has those coordinates. Both servers hold the same leaves, so they drop
+    /// the same ones and call `batch_check` together.
+    fn check_derived_coordinate(
+        &self,
+        client_shares_list: &[SharedRange],
+        leaves: Vec<(Vec<Vec<bool>>, Vec<Vec<u8>>)>,
+        signal_dealer_channels: &mut [CommTrackingChannel],
+        other_server_channels: &mut [CommTrackingChannel],
+    ) -> Result<Vec<Vec<Vec<bool>>>, String> {
+        let derived = match self.derived {
+            Some(derived) => derived,
+            None => return Ok(leaves.into_iter().map(|(prefix, _)| prefix).collect()),
+        };
+        let (h1, eval_len) = (self.h1(), self.h2());
+        let eval_modulus = 1u128 << eval_len;
+        let start = std::time::Instant::now();
+        let num_leaves = leaves.len();
+
+        let leaves: Vec<(Vec<Vec<bool>>, Vec<Vec<u8>>)> = leaves
+            .into_iter()
+            .filter_map(|(mut prefix, data)| {
+                let point: Vec<u128> = prefix.iter().map(|bits| bits_to_u128(bits)).collect();
+                let value = derived.value(&point, h1)?;
+                prefix[derived.index] = u128_to_bits_msb(value, h1);
+                Some((prefix, data))
+            })
+            .collect();
+        println!(
+            "Derived coordinate {}: checking {} of {} crawled points ({} out of range)",
+            derived.index,
+            leaves.len(),
+            num_leaves,
+            num_leaves - leaves.len()
+        );
+        if leaves.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let evals = leaves
+            .par_iter()
+            .map(|(prefix, data)| {
+                data.iter()
+                    .zip(client_shares_list)
+                    .map(|(bytes, shared_range)| {
+                        let (share_data, _) = ShareData::from_bytes(bytes, eval_len, eval_modulus)
+                            .map_err(|e| e.to_string())?;
+                        let mut evals = share_data_evals(share_data);
+                        evals[derived.index] = self
+                            .share_phase
+                            .evaluate_at_single_dimension(
+                                shared_range,
+                                &prefix[derived.index],
+                                derived.index,
+                            )
+                            .map_err(|e| e.to_string())?;
+                        Ok(evals)
+                    })
+                    .collect::<Result<Vec<Vec<u128>>, String>>()
+            })
+            .collect::<Result<Vec<Vec<Vec<u128>>>, String>>()?;
+
+        let heavy = self.batch_check(&evals, signal_dealer_channels, other_server_channels)?;
+        let kept: Vec<Vec<Vec<bool>>> = leaves
+            .into_iter()
+            .zip(heavy)
+            .filter(|(_, heavy)| *heavy)
+            .map(|((prefix, _), _)| prefix)
+            .collect();
+        println!(
+            "Derived coordinate check: {} heavy hitters in {:?}",
+            kept.len(),
+            start.elapsed()
+        );
+        Ok(kept)
     }
 
     fn batch_check(
@@ -1085,6 +1209,21 @@ impl MosaicProtocol {
     pub fn threshold_method(&self) -> ThresholdMethod {
         self.threshold_phase.method()
     }
+}
+
+/// Each coordinate's evaluation of one client's key at the current prefix, as the check phase
+/// takes them.
+fn share_data_evals(share_data: ShareData) -> Vec<u128> {
+    match share_data {
+        ShareData::OKVS { eval } => eval,
+        ShareData::IntervalFSS { data } => data.iter().map(|eval| eval.result()[0]).collect(),
+        ShareData::DistanceFSS { eval, .. } => eval,
+    }
+}
+
+/// Bits, most significant first, as a number.
+fn bits_to_u128(bits: &[bool]) -> u128 {
+    bits.iter().fold(0u128, |acc, &bit| (acc << 1) | u128::from(bit))
 }
 
 fn flatten_verify_values<'a>(

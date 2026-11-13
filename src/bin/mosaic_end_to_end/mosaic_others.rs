@@ -6,6 +6,7 @@
 use clap::{Arg, Command};
 use mosaic::{
     configs::cli_config::{generate_config, CliConfig},
+    data_toolkit::crawl,
     util::{
         bits_to_u128_msb, calculate_distance, calculate_optimistic_distance, get_distance_threshold,
     },
@@ -247,14 +248,38 @@ fn run_ground_truth(config_path: &str) -> Result<(), String> {
     } else {
         println!("\n=== Running Unknown Dictionary Ground Truth ===");
 
-        // Find all fuzzy heavy hitters using prefix-based search
-        let ground_truth_heavy_hitters = find_heavy_hitters_prefix_search(
-            &client_points,
-            cli_config.protocol.delta,
-            cli_config.protocol.match_threshold as usize,
-            cli_config.protocol.h1,
-            &cli_config.protocol.distance_metric,
-        );
+        // Find all fuzzy heavy hitters using prefix-based search. With a derived coordinate
+        // (H3), search like the servers: skip it and check it at the full points.
+        let ground_truth_heavy_hitters = match &cli_config.protocol.derived_coordinate {
+            None => find_heavy_hitters_prefix_search(
+                &client_points,
+                cli_config.protocol.delta,
+                cli_config.protocol.match_threshold as usize,
+                cli_config.protocol.h1,
+                &cli_config.protocol.distance_metric,
+            ),
+            Some(derived) => {
+                let (d, h1) = (cli_config.protocol.d, cli_config.protocol.h1);
+                let levels = crawl::crawl_with_derived(
+                    &client_points,
+                    d,
+                    h1,
+                    crawl::Metric::parse(&cli_config.protocol.distance_metric)?,
+                    cli_config.protocol.delta,
+                    cli_config.protocol.match_threshold as usize,
+                    Some(derived),
+                );
+                println!(
+                    "Crawl skipping coordinate {}: {} prefixes checked",
+                    derived.index,
+                    levels.iter().map(|l| l.candidates.len()).sum::<usize>()
+                );
+                crawl::heavy_hitters(&levels, crawl::total_levels(d, h1, Some(derived)))
+                    .iter()
+                    .map(|c| c.prefix.iter().map(|&(v, _)| v).collect())
+                    .collect()
+            }
+        };
 
         // Display results
         println!("\n=== Ground Truth Results Summary ===");

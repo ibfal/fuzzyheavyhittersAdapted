@@ -14,7 +14,13 @@
     "check_property": "Equality",
     "distance_metric": "Linf",
     "num_clients": 115174,
-    "sketch_modulus": 892270022585185806328177
+    "sketch_modulus": 892270022585185806328177,
+    "derived_coordinate": {
+      "index": 2,
+      "plus": 0,
+      "minus": 1,
+      "offset": 1024
+    }
   },
   "output": {
     "verbose": true,

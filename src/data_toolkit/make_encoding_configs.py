@@ -10,6 +10,8 @@ configs/unknown_dictionary is used as a template and the encoding-dependent fiel
 - match_threshold:       2% of num_clients, rounded down, like the original configs
 - delta:                 per encoding and metric, see DELTAS
 - h2:                    wide enough that the summed per-coordinate distance cannot wrap
+- derived_coordinate:    h3 only: coordinate 2 is i - j, so the crawl skips its bits and checks
+                         it once per full point (see DerivedCoordinate in src/configs/cli_config.rs)
 
 Each coordinate's distance FSS outputs |x - y|^p, capped at delta^p + 1, and the d outputs are
 added mod 2^h2. For L1 and L2 the sum must stay below 2^h2, so h2 = bits(d * (delta^p + 1)). This
@@ -116,6 +118,9 @@ def main():
                     num_clients=n,
                     match_threshold=math.floor(MATCH_FRACTION * n),
                 )
+                if args.encoding == "h3":
+                    # [i + o, j + o, i - j + o]: the third coordinate is the first minus the second.
+                    protocol["derived_coordinate"] = {"index": 2, "plus": 0, "minus": 1, "offset": 2 ** (h1 - 1)}
 
                 out = Path(args.out_dir) / args.encoding / f"busiest_{dataset}" / f"{metric_file}_{share}_config.json"
                 out.parent.mkdir(parents=True, exist_ok=True)

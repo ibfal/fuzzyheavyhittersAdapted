@@ -48,6 +48,54 @@ pub struct ProtocolParameters {
     pub num_clients: usize,
     /// Prime modulo for arithmetic sketching
     pub sketch_modulus: u128,
+    /// A coordinate that is a fixed function of the others (H3's `i - j`). The unknown-dictionary
+    /// crawl skips its bits and checks it once per full point instead. Absent for the other
+    /// encodings, which crawl every coordinate as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_coordinate: Option<DerivedCoordinate>,
+}
+
+/// Coordinate `index` of every client point is `point[plus] - point[minus] + offset`.
+///
+/// For H3 points `[i + o, j + o, i - j + o]` this is `{index: 2, plus: 0, minus: 1, offset: o}`.
+/// The crawl then only branches on the other coordinates. Leaving the derived coordinate at the
+/// empty prefix counts every client as inside on it (distance 0), so while crawling the count of
+/// a prefix can only be too high: no heavy hitter is pruned. At a full point the derived
+/// coordinate has a single possible value, and the final check uses all coordinates exactly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivedCoordinate {
+    pub index: usize,
+    pub plus: usize,
+    pub minus: usize,
+    pub offset: u128,
+}
+
+impl DerivedCoordinate {
+    /// Check the coordinates against the dimension `d`.
+    pub fn validate(&self, d: usize) -> Result<(), String> {
+        if self.index >= d || self.plus >= d || self.minus >= d {
+            return Err(format!("derived_coordinate {:?} does not fit d = {}", self, d));
+        }
+        if self.index == self.plus || self.index == self.minus || self.plus == self.minus {
+            return Err(format!(
+                "derived_coordinate {:?} must name three different coordinates",
+                self
+            ));
+        }
+        Ok(())
+    }
+
+    /// The coordinates the crawl branches on, in crawl order.
+    pub fn crawl_dims(derived: Option<&Self>, d: usize) -> Vec<usize> {
+        (0..d).filter(|&k| derived.map_or(true, |c| c.index != k)).collect()
+    }
+
+    /// The derived coordinate of `point` (its own entry is ignored), or `None` if it does not fit
+    /// in `h1` bits, in which case no client point has these other coordinates.
+    pub fn value(&self, point: &[u128], h1: usize) -> Option<u128> {
+        let v = (point[self.plus] + self.offset).checked_sub(point[self.minus])?;
+        (v < 1u128 << h1).then_some(v)
+    }
 }
 
 /// Output and logging configuration
@@ -138,6 +186,7 @@ pub fn generate_config(output_path: &str) -> Result<(), String> {
             distance_metric: "Linf".to_string(), // Can also be "L1", "L2", "L3"
             num_clients: 100,                 // Number of clients participating in the protocol
             sketch_modulus: 1362378130168812918549609490751, // A prime number of 100 bits
+            derived_coordinate: None,
         },
         output: OutputConfig {
             verbose: true,

@@ -659,8 +659,23 @@ Instead, each cell is given by its local `(i, j)` coordinates relative to the ce
 On these coordinates `Linf` is exactly the H3 grid distance (number of hexagon steps), `L1` is twice the grid distance, and `L2` is `sqrt(2)` times the distance between cell centers in units of the center spacing (about 140 m at resolution 10).
 The defaults `delta` = 4 / 8 / 5 give neighbourhoods of about 560 m, comparable to the other encodings; `Linf` 4 and `L1` 8 are the same neighbourhood.
 
-The crawl does not know that the third coordinate is `i - j`, so it also reports triples that are not cells: on the busiest day 5018 `Linf` heavy hitters, of which 445 are cells.
-`heavy_hitters_decoder` leaves the others out. They also make the crawl about 3 times longer (13953 prefixes instead of 4257 if the servers dropped every prefix that cannot contain a cell, which they could do from the public prefixes alone; this is not implemented).
+The third coordinate carries no information of its own: it is always the first minus the second (plus `o`). The H3 configs therefore name it as a `derived_coordinate`:
+```json
+"derived_coordinate": { "index": 2, "plus": 0, "minus": 1, "offset": 1024 }
+```
+The clients still send keys for all three coordinates, but the servers' unknown-dictionary crawl only takes bits of `i` and `j`.
+The third coordinate stays at the empty prefix, where every client counts as inside (distance 0). So while crawling, a prefix's count can only be too high, never too low, and no heavy hitter is pruned.
+Once `i` and `j` are full, each kept point has exactly one possible third coordinate. The servers evaluate the clients' third keys at that value and run one more threshold check with all three coordinates, which gives the exact hexagon distance.
+On the busiest day (FSS configs) this finds the same cells with the same counts, and no non-cell triples:
+
+| Metric | Crawl of all 3 coordinates | Third coordinate derived |
+| --- | --- | --- |
+| `Linf` | 33 levels, 13952 prefixes, 445 cells + 4573 non-cells | 23 levels, 2577 prefixes, 445 cells |
+| `L1` | 33 levels, 18856 prefixes, 445 cells + 5544 non-cells | 23 levels, 4856 prefixes, 445 cells |
+| `L2` | 33 levels, 11108 prefixes, 304 cells + 3221 non-cells | 23 levels, 2700 prefixes, 304 cells |
+
+Without `derived_coordinate` (as in configs written before this option), the crawl branches on all three coordinates. It then also reports triples that are not cells, and `heavy_hitters_decoder` leaves those out.
+`mosaic_others ground-truth` and `crawl_exporter` follow the config in the same way.
 
 To see the crawl of every encoding side by side on a map, level by level, see the crawl viewer in [viz/README.md](viz/README.md) (`viz/run_crawls.sh busiest_day`).
 

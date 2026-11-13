@@ -8,9 +8,11 @@ candidate prefix is drawn as its region: filled if at least the threshold of cli
 what the servers learn during the protocol. Unlike Mastic, a count is the number of clients
 *near* a region, not inside it, so neighbouring regions share clients.
 
-The levels differ per encoding: `d * h1` is 22 for the grid and geohash, 20 for Morton and 33
-for H3 (three coordinates). A pane that has finished shows its final level. For H3 the crawl
-also keeps triples whose third coordinate is not `i - j`; no location encodes to them, so they
+The levels differ per encoding: `d * h1` is 22 for the grid and geohash and 20 for Morton. H3
+has three coordinates, but its config names the third (`i - j`) as a `derived_coordinate`: the
+crawl only takes bits of `i` and `j` (22 levels) and a 23rd level checks every kept `(i, j)` at
+its one cell. A pane that has finished shows its final level. Runs saved before this change
+crawled all 33 levels of H3 and also kept triples whose third coordinate is not `i - j`; those
 are counted in the pane's note but not drawn.
 
 ## Save runs

@@ -6,8 +6,9 @@
 //! candidate prefix, to `--output`.
 
 use clap::Parser;
+use mosaic::configs::cli_config::DerivedCoordinate;
 use mosaic::data_toolkit::{
-    crawl::{crawl, prefix_bits, prefix_ranges, Metric},
+    crawl::{crawl_with_derived, heavy_hitters, prefix_bits, prefix_ranges, total_levels, Metric},
     encoding::{metadata_path, read_metadata, Encoding, EncodingMetadata, PointKind},
 };
 use serde_json::{json, Value};
@@ -100,6 +101,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let metric = Metric::parse(metric_name)?;
     let (delta, threshold) = (field("delta")? as u128, field("match_threshold")? as usize);
     let (d, h1) = (field("d")? as usize, field("h1")? as usize);
+    // H3 configs name a derived coordinate, which the crawl skips and checks at the end.
+    let derived: Option<DerivedCoordinate> = match protocol.get("derived_coordinate") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(serde_json::from_value(v.clone())?),
+    };
+    if let Some(derived) = &derived {
+        derived.validate(d)?;
+    }
+    let total = total_levels(d, h1, derived.as_ref());
 
     let points: Vec<Vec<u128>> = serde_json::from_str(&fs::read_to_string(&data_file)?)?;
     let metadata = load_metadata(&args, &data_file, d, h1, points.len())?;
@@ -121,22 +131,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         delta,
         threshold
     );
-    let levels = crawl(&points, d, h1, metric, delta, threshold);
+    let levels = crawl_with_derived(&points, d, h1, metric, delta, threshold, derived.as_ref());
 
-    let mut heavy_hitters = Vec::new();
+    let mut hitters = Vec::new();
     let mut non_cells = 0;
-    if let Some(last) = levels.last().filter(|l| l.level == d * h1) {
-        for c in last.candidates.iter().filter(|c| c.heavy) {
-            let point: Vec<u128> = c.prefix.iter().map(|&(v, _)| v).collect();
-            match encoder.decode(&point) {
-                Some((lat, lon)) => heavy_hitters.push(json!({
-                    "point": point.iter().map(u128::to_string).collect::<Vec<_>>(),
-                    "label": encoder.label(&point),
-                    "center": [round(lat), round(lon)],
-                    "count": c.count,
-                })),
-                None => non_cells += 1,
-            }
+    for c in heavy_hitters(&levels, total) {
+        let point: Vec<u128> = c.prefix.iter().map(|&(v, _)| v).collect();
+        match encoder.decode(&point) {
+            Some((lat, lon)) => hitters.push(json!({
+                "point": point.iter().map(u128::to_string).collect::<Vec<_>>(),
+                "label": encoder.label(&point),
+                "center": [round(lat), round(lon)],
+                "count": c.count,
+            })),
+            None => non_cells += 1,
         }
     }
 
@@ -181,6 +189,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         "num_clients": points.len(),
         "d": d,
         "h1": h1,
+        "total_levels": total,
+        "derived_coordinate": derived,
         "rides": {
             "total": metadata.total_rides,
             "clamped": metadata.clamped_rides,
@@ -188,7 +198,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
         "prefixes_checked": prefixes,
         "non_cell_heavy_hitters": non_cells,
-        "heavy_hitters": heavy_hitters,
+        "heavy_hitters": hitters,
         "levels": levels_json,
         "total_seconds": start.elapsed().as_secs_f64(),
     });
@@ -200,7 +210,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "{} levels, {} prefixes checked, {} heavy hitters ({} points that are not cells) -> {}",
         levels.len(),
         prefixes,
-        heavy_hitters.len(),
+        hitters.len(),
         non_cells,
         args.output
     );

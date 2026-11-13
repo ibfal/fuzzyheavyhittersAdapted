@@ -222,8 +222,28 @@ function coordName(run, dim) {
   return (COORDS[run.encoding_name] || [])[dim] || `coordinate ${dim}`;
 }
 
+// Runs saved before derived coordinates have neither field: every coordinate is crawled.
+function totalLevels(run) {
+  return run.total_levels ?? run.d * run.h1;
+}
+
+function crawledDims(run) {
+  const dims = [...Array(run.d).keys()];
+  return run.derived_coordinate ? dims.filter((k) => k !== run.derived_coordinate.index) : dims;
+}
+
+/** What the level did, e.g. "bit 3 of i", or the final check of the derived coordinate. */
+function levelStep(run, lvl) {
+  if (run.derived_coordinate && lvl.level === totalLevels(run)) return `check of ${coordName(run, lvl.dim)}`;
+  return `bit ${Math.floor((lvl.level - 1) / crawledDims(run).length) + 1} of ${coordName(run, lvl.dim)}`;
+}
+
 function levelNote(run, lvl) {
-  const final = lvl.level === run.d * run.h1;
+  const final = lvl.level === totalLevels(run);
+  if (final && run.derived_coordinate) {
+    return `Final level: ${coordName(run, run.derived_coordinate.index)} is not crawled. Every kept (i, j) gets its ` +
+      "only cell and is checked with all three coordinates; the kept cells are the fuzzy heavy hitters.";
+  }
   if (final && run.non_cell_heavy_hitters) {
     return `Final level: ${fmt(run.heavy_hitters.length)} heavy hitters are cells. ` +
       `The other ${fmt(run.non_cell_heavy_hitters)} kept points have a third coordinate that is not i − j: ` +
@@ -362,14 +382,13 @@ function render() {
     }
     const { run, lvl } = s;
     const kept = lvl.candidates.filter((c) => c.heavy).length;
-    const total = run.d * run.h1;
-    const bit = Math.floor((lvl.level - 1) / run.d) + 1;
+    const total = totalLevels(run);
     const atEnd = state.level > run.levels.length;
     const outside = run.rides.dropped || run.rides.clamped
       ? ` · <b>${fmt(run.rides.dropped)}</b> dropped, <b>${fmt(run.rides.clamped)}</b> clamped`
       : "";
     stats.innerHTML =
-      `level <b>${lvl.level}</b>/${total}${atEnd ? " (final)" : ""}: bit ${bit} of ${coordName(run, lvl.dim)} · ` +
+      `level <b>${lvl.level}</b>/${total}${atEnd ? " (final)" : ""}: ${levelStep(run, lvl)} · ` +
       `<b>${fmt(lvl.candidates.length)}</b> candidates · <b>${fmt(kept)}</b> kept · ` +
       `${METRIC_LABEL[run.metric] || run.metric} δ = <b>${run.delta}</b> · ` +
       `threshold <b>${fmt(run.threshold)}</b> of ${fmt(run.num_clients)} clients${outside}`;
