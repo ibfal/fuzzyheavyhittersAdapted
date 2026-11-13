@@ -591,7 +591,7 @@ def main():
     expect = [("mosaic_grid", "points", 916), ("morton", "points", 916),
               ("geohash", "points", 891), ("h3_delta4", "points", 445),
               ("h3_delta4", "levels", 23), ("h3_delta4", "prefixes_checked", 2577)]
-    print(f"\nREADME figures, {dataset}_{full} tau 0.02 (README.md:97, :649, :655, :671):")
+    print(f"\nREADME figures, {dataset}_{full} tau 0.02 (README.md:97, :649, :655, :673):")
     for variant, key, want in expect:
         got = answers[(full, 0.02, variant)]["summary"][key]
         print(f"  {'PASS' if got == want else 'DIFF'}  {variant} {key}: {got} (README {want})")
