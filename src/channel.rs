@@ -90,15 +90,39 @@ pub fn connect_to(
     Ok(CommTrackingChannel::new(reader, writer))
 }
 
+/// Environment variable that sets the reader and writer buffer size of the listening side of a
+/// channel, in bytes. Unset, the size is the original 1 GiB.
+pub const CHANNEL_BUFFER_ENV: &str = "MOSAIC_CHANNEL_BUFFER_BYTES";
+
+/// The original buffer size of the listening side: 64 * 4096 * 4096 bytes = 1 GiB.
+pub const DEFAULT_CHANNEL_BUFFER_BYTES: usize = 64 * 4096 * 4096;
+
+/// The buffer size `listen_to` uses: `MOSAIC_CHANNEL_BUFFER_BYTES` if set, else 1 GiB.
+pub fn channel_buffer_bytes() -> Result<usize, Box<dyn std::error::Error>> {
+    match std::env::var(CHANNEL_BUFFER_ENV) {
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_CHANNEL_BUFFER_BYTES),
+        Err(e) => Err(format!("{}: {}", CHANNEL_BUFFER_ENV, e).into()),
+        Ok(value) => match value.trim().parse::<usize>() {
+            Ok(bytes) if bytes > 0 => Ok(bytes),
+            _ => Err(format!(
+                "{} must be a positive number of bytes, got {:?}",
+                CHANNEL_BUFFER_ENV, value
+            )
+            .into()),
+        },
+    }
+}
+
 pub fn listen_to(ip: String, port: u16) -> Result<CommTrackingChannel, Box<dyn std::error::Error>> {
     let addr = format!("{}:{}", ip, port);
     println!("Listening on {}", addr);
 
+    let buffer_bytes = channel_buffer_bytes()?;
     let listener = TcpListener::bind(&addr)?;
     let (stream, _) = listener.accept()?;
     stream.set_nodelay(true)?;
-    let reader = BufReader::with_capacity(64 * 4096 * 4096, stream.try_clone()?);
-    let writer = BufWriter::with_capacity(64 * 4096 * 4096, stream);
+    let reader = BufReader::with_capacity(buffer_bytes, stream.try_clone()?);
+    let writer = BufWriter::with_capacity(buffer_bytes, stream);
     Ok(CommTrackingChannel::new(reader, writer))
 }
 

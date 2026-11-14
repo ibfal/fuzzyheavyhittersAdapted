@@ -79,7 +79,7 @@ fn print_client_summary(
     );
 }
 /// Run as client - generates shares and sends them to servers
-fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String> {
+fn run_client(config_path: &str, network_config_path: &str, bench_out: Option<&str>) -> Result<(), String> {
     println!("Starting Client...");
     let cli_config = CliConfig::from_file(config_path)?;
 
@@ -119,10 +119,12 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
     println!("Client sending PC-FSS keys took {:.2?}", share_send_time);
 
     let sketch_start = std::time::Instant::now();
+    let mut sketch_gen_time = std::time::Duration::ZERO;
     if enable_sketch {
         let (sketches0, sketches1) = client
             .generate_client_sketch_data()
             .map_err(|e| e.to_string())?;
+        sketch_gen_time = sketch_start.elapsed();
 
         println!("Client generating sketch data took {:.2?}", sketch_start.elapsed());
 
@@ -132,12 +134,36 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
 
         println!("Client sending sketch data took {:.2?}", sketch_start.elapsed());
     }
+    let t_sketch_sent_ns = mosaic::bench::unix_ns();
 
     let total_time = share_creation_time + share_send_time;
 
     // Calculate communication metrics
     let (bytes_sent_0, _) = channel_server0.get_communication_stats();
     let (bytes_sent_1, _) = channel_server1.get_communication_stats();
+
+    if let Some(out) = bench_out {
+        // Benchmark: the client's view of the upload, for server 0's result line.
+        let snapshot = mosaic::bench::snapshot();
+        let t_first_byte_ns = snapshot["marks"]["client_first_byte"]
+            .as_u64()
+            .ok_or("bench: the client recorded no first byte")?;
+        let part = serde_json::json!({
+            "party": "client",
+            "n_clients": num_clients,
+            "t_first_byte_ns": t_first_byte_ns,
+            "t_sketch_sent_ns": t_sketch_sent_ns as u64,
+            // Generated between the two sends; A3/B3: not part of the upload.
+            "sketch_gen_ns": sketch_gen_time.as_nanos() as u64,
+            "share_gen_ms": share_creation_time.as_secs_f64() * 1e3,
+            // Application-level bytes written to each server (A4): shares + sketch data.
+            "bytes_sent": [bytes_sent_0, bytes_sent_1],
+            // One round: the client sends both messages to both servers without waiting for a
+            // reply (the "hi" it waits for before is the servers' ready signal, set-up).
+            "rounds_upload": 1,
+        });
+        mosaic::bench::write_json_atomic(&mosaic::bench::part_path(out, "client"), &part)?;
+    }
 
     print_client_summary(
         share_creation_time,
@@ -157,13 +183,20 @@ struct Args {
     config: String,
     #[arg(short, long)]
     network_config: String,
+    /// Benchmark (bench/BENCHMARK_MOSAIC.md): the result file of the run. The client writes its
+    /// measurements to `<file>.client.part.json` for server 0's result line.
+    #[arg(long)]
+    bench_out: Option<String>,
 }
 
 fn main() {
     let args = Args::parse();
     let config_path = &args.config;
     let network_config_path = &args.network_config;
-    let result = run_client(config_path, network_config_path);
+    if args.bench_out.is_some() {
+        mosaic::bench::enable();
+    }
+    let result = run_client(config_path, network_config_path, args.bench_out.as_deref());
     if let Err(e) = result {
         eprintln!("Error running client: {}", e);
     }

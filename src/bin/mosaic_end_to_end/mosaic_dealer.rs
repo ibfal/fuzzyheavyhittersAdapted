@@ -117,7 +117,12 @@ fn print_dealer_summary(
     );
 }
 /// Run as dealer - generates and distributes FSS keys to servers
-fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) -> Result<(), String> {
+fn run_dealer(
+    config_path: &str,
+    network_config_path: &str,
+    num_threads: usize,
+    bench_out: Option<&str>,
+) -> Result<(), String> {
     if num_threads == 0 {
         return Err("--threads must be greater than 0".to_string());
     }
@@ -154,14 +159,42 @@ fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) 
     // Determine number of parallel channels (use specified num_threads or system parallelism)
     let num_channels = num_threads;
 
+    // Benchmark (--bench-out): generate every channel's starting keys before connecting, and
+    // record when that is done. The runner waits for this record before it starts the servers
+    // and the client, so the key generation does not overlap their measured phases.
+    let pregenerated = match bench_out {
+        Some(out) => {
+            use rayon::prelude::*;
+            let start = std::time::Instant::now();
+            let keys = (0..num_channels)
+                .into_par_iter()
+                .map(|_| dealer.pregenerate_keys(check_key_mode))
+                .collect::<Result<Vec<_>, String>>()?;
+            let pregen = start.elapsed();
+            println!("Dealer: pre-generated the keys of {} channels in {:.2?}", num_channels, pregen);
+            mosaic::bench::write_json_atomic(
+                &mosaic::bench::part_path(out, "dealer"),
+                &serde_json::json!({
+                    "party": "dealer",
+                    "pregen_ms": pregen.as_secs_f64() * 1e3,
+                    "t_pregen_done_ns": mosaic::bench::unix_ns() as u64,
+                    "channels": num_channels,
+                }),
+            )?;
+            Some(keys)
+        }
+        None => None,
+    };
+
     let mut network = setup_network_dealer(network_config_path, num_channels)?;
 
     let dealer_start = std::time::Instant::now();
     dealer
-        .run_dealer_parallel(
+        .run_dealer_parallel_with_keys(
             &mut network.signal_channels_server0,
             &mut network.signal_channels_server1,
             check_key_mode,
+            pregenerated,
         )
         .map_err(|e| format!("Failed to run parallel dealer protocol: {}", e))?;
     let dealer_time = dealer_start.elapsed();
@@ -188,6 +221,10 @@ struct Args {
     network_config: String,
     #[arg(short, long)]
     threads: usize,
+    /// Benchmark (bench/BENCHMARK_MOSAIC.md): the result file of the run. The dealer then
+    /// generates its keys before connecting and writes `<file>.dealer.part.json` when done.
+    #[arg(long)]
+    bench_out: Option<String>,
 }
 
 fn main() {
@@ -195,8 +232,11 @@ fn main() {
     let config_path = &args.config;
     let network_config_path = &args.network_config;
     let num_threads = args.threads;
+    if args.bench_out.is_some() {
+        mosaic::bench::enable();
+    }
 
-    let result = run_dealer(config_path, network_config_path, num_threads);
+    let result = run_dealer(config_path, network_config_path, num_threads, args.bench_out.as_deref());
 
     if let Err(e) = result {
         eprintln!("Error running dealer: {}", e);

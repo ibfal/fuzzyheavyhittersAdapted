@@ -340,6 +340,13 @@ impl DealerSignal {
     }
 }
 
+/// The keys one dealer channel pair starts with (see `FssDealer::pregenerate_keys`).
+pub struct PregeneratedKeys {
+    equality_keys: Option<(Vec<SerializedDpfKey>, Vec<SerializedDpfKey>, Vec<(Vec<bool>, Vec<bool>)>)>,
+    check_keys: Option<(Vec<SerializedFssKey>, Vec<SerializedFssKey>, Vec<(u128, u128)>)>,
+    threshold_keys: (Vec<SerializedFssKey>, Vec<SerializedFssKey>, Vec<(u128, u128)>),
+}
+
 /// Networked FSS Dealer that communicates with servers over TCP
 pub struct FssDealer {
     distance_threshold: u128,
@@ -370,6 +377,38 @@ impl FssDealer {
         }
     }
 
+    /// The keys one channel pair starts with, generated before its first request. This is what
+    /// each channel's thread of `run_dealer_parallel` generates before it serves requests.
+    pub fn pregenerate_keys(&self, check_key_mode: CheckKeyMode) -> Result<PregeneratedKeys, String> {
+        let mut equality_keys: Option<(
+            Vec<SerializedDpfKey>,
+            Vec<SerializedDpfKey>,
+            Vec<(Vec<bool>, Vec<bool>)>,
+        )> = None;
+        let mut check_keys: Option<(
+            Vec<SerializedFssKey>,
+            Vec<SerializedFssKey>,
+            Vec<(u128, u128)>,
+        )> = None;
+        match check_key_mode {
+            CheckKeyMode::Equality => {
+                equality_keys = Some(
+                    self.generate_fss_keys_for_equality()
+                        .map_err(|e| format!("Failed to pre-generate equality keys: {}", e))?,
+                );
+            }
+            CheckKeyMode::MuBounded => {
+                check_keys = Some(
+                    self.generate_fss_keys_for_check()
+                        .map_err(|e| format!("Failed to pre-generate check keys: {}", e))?,
+                );
+            }
+        }
+        let threshold_keys = self.generate_fss_keys_for_threshold()
+            .map_err(|e| format!("Failed to pre-generate threshold keys: {}", e))?;
+        Ok(PregeneratedKeys { equality_keys, check_keys, threshold_keys })
+    }
+
     /// Run the dealer with multiple channels - handle key requests from multiple parallel channels
     pub fn run_dealer_parallel(
         &self,
@@ -377,10 +416,44 @@ impl FssDealer {
         signal_channels_server1: &mut [CommTrackingChannel],
         check_key_mode: CheckKeyMode,
     ) -> Result<(), String> {
+        self.run_dealer_parallel_with_keys(
+            signal_channels_server0,
+            signal_channels_server1,
+            check_key_mode,
+            None,
+        )
+    }
+
+    /// `run_dealer_parallel` with the starting keys of channel pair `i` taken from
+    /// `pregenerated[i]` instead of being generated on the channel's thread. With `None` it is
+    /// `run_dealer_parallel`. The benchmark runner uses `Some`: the dealer generates the keys
+    /// before it connects, and the runner waits for that before it starts the servers and the
+    /// client, so the key generation does not run during their measured phases.
+    pub fn run_dealer_parallel_with_keys(
+        &self,
+        signal_channels_server0: &mut [CommTrackingChannel],
+        signal_channels_server1: &mut [CommTrackingChannel],
+        check_key_mode: CheckKeyMode,
+        pregenerated: Option<Vec<PregeneratedKeys>>,
+    ) -> Result<(), String> {
         println!(
             "FSS Dealer starting with {} channels per server...",
             signal_channels_server0.len()
         );
+
+        let mut pregenerated: Vec<Option<PregeneratedKeys>> = match pregenerated {
+            Some(keys) => {
+                if keys.len() != signal_channels_server0.len() {
+                    return Err(format!(
+                        "{} pre-generated key sets for {} channels",
+                        keys.len(),
+                        signal_channels_server0.len()
+                    ));
+                }
+                keys.into_iter().map(Some).collect()
+            }
+            None => (0..signal_channels_server0.len()).map(|_| None).collect(),
+        };
 
         println!("Dealer ready");
 
@@ -388,34 +461,14 @@ impl FssDealer {
         signal_channels_server0
             .par_iter_mut()
             .zip(signal_channels_server1.par_iter_mut())
+            .zip(pregenerated.par_iter_mut())
             .enumerate()
-            .try_for_each(|(channel_idx, (signal_channel_server0, signal_channel_server1))| {
-                let mut equality_keys: Option<(
-                    Vec<SerializedDpfKey>,
-                    Vec<SerializedDpfKey>,
-                    Vec<(Vec<bool>, Vec<bool>)>,
-                )> = None;
-                let mut check_keys: Option<(
-                    Vec<SerializedFssKey>,
-                    Vec<SerializedFssKey>,
-                    Vec<(u128, u128)>,
-                )> = None;
-                match check_key_mode {
-                    CheckKeyMode::Equality => {
-                        equality_keys = Some(
-                            self.generate_fss_keys_for_equality()
-                                .map_err(|e| format!("Failed to pre-generate equality keys: {}", e))?,
-                        );
-                    }
-                    CheckKeyMode::MuBounded => {
-                        check_keys = Some(
-                            self.generate_fss_keys_for_check()
-                                .map_err(|e| format!("Failed to pre-generate check keys: {}", e))?,
-                        );
-                    }
-                }
-                let mut threshold_keys = self.generate_fss_keys_for_threshold()
-                    .map_err(|e| format!("Failed to pre-generate threshold keys: {}", e))?;
+            .try_for_each(|(channel_idx, ((signal_channel_server0, signal_channel_server1), pregenerated))| {
+                let PregeneratedKeys { mut equality_keys, mut check_keys, mut threshold_keys } =
+                    match pregenerated.take() {
+                        Some(keys) => keys,
+                        None => self.pregenerate_keys(check_key_mode)?,
+                    };
                 // Each channel pair runs in its own persistent loop
                 loop {
                     let server0_signal = self.read_dealer_signal(&mut *signal_channel_server0);

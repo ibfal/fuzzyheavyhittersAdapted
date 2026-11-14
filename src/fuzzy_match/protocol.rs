@@ -178,6 +178,7 @@ impl MosaicProtocol {
         let mut malicious_flags = vec![false; client_shares.len()];
         let mut sketch_seeds = vec![[0u8; 16]; client_shares.len()];
         prg.random_16byte_block(&mut sketch_seeds);
+        let bench_turns = crate::bench::TurnMax::new();
 
         malicious_flags
             .par_chunks_mut(chunk_size)
@@ -186,6 +187,7 @@ impl MosaicProtocol {
             .zip(sketch_seeds.par_chunks(chunk_size))
             .zip(other_server_channels.par_iter_mut())
             .try_for_each(|((((malicious_flags_chunk, range_chunk), sketch_data_chunk), sketch_seeds_chunk), other_server_channel)| -> Result<()> {
+                bench_turns.begin();
                 let start = std::time::Instant::now();
 
                 let sketch_helper = self.sketch_phase
@@ -251,6 +253,7 @@ impl MosaicProtocol {
                         .map_err(|e| anyhow!("Failed to send verify values to other server: {}", e))?;
                     other_values
                 };
+                crate::bench::turns(1); // the opening: server 1 sends first, then waits
 
                 println!("Other server verify values received in {:?}", start.elapsed());
 
@@ -274,8 +277,10 @@ impl MosaicProtocol {
                     }
                 }
 
+                bench_turns.end();
                 Ok(())
             })?;
+        crate::bench::add_rounds("sketch_verify", &[&bench_turns]);
 
         Ok(malicious_flags)
     }
@@ -583,6 +588,7 @@ impl MosaicProtocol {
         let expansion_window = (num_threads * 4).max(1);
         let crawl_dims = DerivedCoordinate::crawl_dims(self.derived.as_ref(), dimension);
 
+        let bench_init = crate::bench::timer();
         let empty_string_data = client_shares_list
             .iter()
             .map(|shared_range| {
@@ -591,6 +597,7 @@ impl MosaicProtocol {
             })
             .collect::<Result<Vec<Vec<u8>>, _>>()
             .map_err(|e| e.to_string())?;
+        bench_init.stop("expand");
         let mut current_data = vec![TraversalState {
             data: empty_string_data,
             prefix: vec![vec![]; dimension],
@@ -603,6 +610,8 @@ impl MosaicProtocol {
         let mut final_states: Vec<(Vec<Vec<bool>>, Vec<Vec<u8>>)> = Vec::new();
 
         while !current_data.is_empty() {
+            let bench_expand = crate::bench::timer();
+            crate::bench::count("crawl_iterations", 1);
             let start = std::time::Instant::now();
             let split_at = current_data.len().saturating_sub(expansion_window);
             let expand_states = current_data.split_off(split_at);
@@ -691,12 +700,25 @@ impl MosaicProtocol {
                         .collect::<Result<Vec<Vec<u128>>, String>>()
                 })
                 .collect::<Result<Vec<Vec<Vec<u128>>>, String>>()?;
+            bench_expand.stop("expand");
 
             let exceeds_threshold_results = self.batch_check(
                 &new_eval,
                 signal_dealer_channels,
                 other_server_channels,
             )?;
+
+            let bench_filter = crate::bench::timer();
+            if crate::bench::enabled() {
+                // A7: every checked prefix opens one bit to both servers; its level is the number
+                // of prefix bits over all coordinates.
+                let levels: Vec<(usize, bool)> = new_states
+                    .iter()
+                    .zip(exceeds_threshold_results.iter())
+                    .map(|(state, &exceed)| (state.prefix.iter().map(Vec::len).sum(), exceed))
+                    .collect();
+                crate::bench::record_levels(&levels);
+            }
 
             for (state, &exceed) in new_states.iter_mut().zip(exceeds_threshold_results.iter()) {
                 if !exceed {
@@ -728,6 +750,7 @@ impl MosaicProtocol {
                 final_prefixes.len() + final_states.len(),
                 start.elapsed()
             );
+            bench_filter.stop("expand");
         }
 
         if self.derived.is_some() {
@@ -776,6 +799,9 @@ impl MosaicProtocol {
             Some(derived) => derived,
             None => return Ok(leaves.into_iter().map(|(prefix, _)| prefix).collect()),
         };
+        // Everything below, its batch_check included, counts as the step `derived_check`.
+        let _bench_scope = crate::bench::scope("derived_check");
+        let bench_local = crate::bench::timer();
         let (h1, eval_len) = (self.h1(), self.h2());
         let eval_modulus = 1u128 << eval_len;
         let start = std::time::Instant::now();
@@ -798,6 +824,7 @@ impl MosaicProtocol {
             num_leaves - leaves.len()
         );
         if leaves.is_empty() {
+            bench_local.stop("derived_check");
             return Ok(Vec::new());
         }
 
@@ -824,7 +851,15 @@ impl MosaicProtocol {
             })
             .collect::<Result<Vec<Vec<Vec<u128>>>, String>>()?;
 
+        bench_local.stop("derived_check");
         let heavy = self.batch_check(&evals, signal_dealer_channels, other_server_channels)?;
+        let bench_local = crate::bench::timer();
+        if crate::bench::enabled() {
+            // The final level: one opened bit per point checked with its derived coordinate.
+            let level = DerivedCoordinate::crawl_dims(Some(&derived), self.d()).len() * h1 + 1;
+            let levels: Vec<(usize, bool)> = heavy.iter().map(|&h| (level, h)).collect();
+            crate::bench::record_levels(&levels);
+        }
         let kept: Vec<Vec<Vec<bool>>> = leaves
             .into_iter()
             .zip(heavy)
@@ -836,6 +871,7 @@ impl MosaicProtocol {
             kept.len(),
             start.elapsed()
         );
+        bench_local.stop("derived_check");
         Ok(kept)
     }
 
@@ -880,12 +916,15 @@ impl MosaicProtocol {
         );
 
         // Use rayon to process chunks in parallel
+        let bench_check = crate::bench::timer();
+        let bench_check_turns = crate::bench::TurnMax::new();
         server_bits
             .par_chunks_mut(chunk_size)
             .zip(current_eval.par_chunks(chunk_size))
             .zip(signal_dealer_channels.par_iter_mut())
             .zip(other_server_channels.par_iter_mut())
             .try_for_each(|(((result_chunk, eval_chunk), signal_dealer_channel), other_server_channel)| {
+                bench_check_turns.begin();
                 // Use the corresponding dealer channels for this thread
                 let mut local_rng = AesRng::new();
                 let mut aggregated_counts = Vec::new();
@@ -987,15 +1026,19 @@ impl MosaicProtocol {
                 result_chunk.copy_from_slice(&results_bool);
                 println!("Time for threshold comparison: {:?}", start.elapsed());
 
+                bench_check_turns.end();
                 Ok::<(), String>(())
             })
             .map_err(|e| format!("Parallel processing failed: {}", e))?;
+        bench_check.stop("check_threshold");
 
         // After parallel processing, exchange the final results in parallel chunks
         let chunk_size = (server_bits.len() + num_threads - 1) / num_threads;
         let mut final_results = vec![false; server_bits.len()];
 
         // Exchange bits in parallel chunks using the other server channels
+        let bench_reveal = crate::bench::timer();
+        let bench_reveal_turns = crate::bench::TurnMax::new();
         let start = std::time::Instant::now();
         final_results
             .par_chunks_mut(chunk_size)
@@ -1004,6 +1047,7 @@ impl MosaicProtocol {
             .enumerate()
             .try_for_each(
                 |(chunk_idx, ((result_chunk, bits_chunk), other_server_channel))| {
+                    bench_reveal_turns.begin();
                     // Use the corresponding other server channel for this chunk
                     let bits_chunk_vec: Vec<bool> = bits_chunk.to_vec();
 
@@ -1066,11 +1110,17 @@ impl MosaicProtocol {
                             result_chunk[i] = bit0 ^ bit1;
                         }
                     }
+                    // The result-bit exchange: server 0 sends first, then waits.
+                    crate::bench::turns(1);
 
+                    bench_reveal_turns.end();
                     Ok::<(), String>(())
                 },
             )
             .map_err(|e| format!("Parallel bit exchange failed: {}", e))?;
+        bench_reveal.stop("reveal");
+        // The two sections run one after the other: their critical paths add up.
+        crate::bench::add_rounds("crawl", &[&bench_check_turns, &bench_reveal_turns]);
         println!("Time for parallel bit exchange: {:?}", start.elapsed());
         println!("Parallel processing completed successfully");
         Ok(final_results)
@@ -1304,6 +1354,7 @@ pub fn request_dealer_check(
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
+    crate::bench::turns(1); // request sent, then waited for the dealer's keys
     // Receive serialized check keys from dealer without deserializing the individual keys yet
     let (fss_key_batch, _) =
         SerializedFssKeyBatch::from_bytes(&batch_data)
@@ -1341,6 +1392,7 @@ pub fn request_dealer_equality(
         .read_bytes(&mut batch_data)
         .map_err(|e| anyhow!("Failed to read key batch data: {}", e))?;
 
+    crate::bench::turns(1); // request sent, then waited for the dealer's keys
     let (fss_key_batch, _) = SerializedDpfKeyBatch::from_bytes(&batch_data)
         .map_err(|e| anyhow!("Failed to deserialize SerializedDpfKeyBatch for equality testing from dealer: {}", e))?;
     Ok(fss_key_batch)
@@ -1376,6 +1428,7 @@ pub fn request_dealer_threshold(
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
+    crate::bench::turns(1); // request sent, then waited for the dealer's keys
     let (fss_key_batch, _) =
         SerializedFssKeyBatch::from_bytes(&batch_data)
             .map_err(|e| format!("Failed to deserialize SerializedFssKeyBatch for threshold testing from dealer: {}", e))?;

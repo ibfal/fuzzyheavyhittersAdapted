@@ -100,6 +100,7 @@ impl Client {
             data.extend_from_slice(&share.to_bytes());
         }
         let len_bytes = (data.len() as u64).to_le_bytes();
+        crate::bench::mark("client_first_byte"); // A3: the upload starts with the first byte sent
         channel_server0
             .write_bytes(&len_bytes)
             .map_err(|e| anyhow!("Failed to send length to server 0: {}", e))?;

@@ -1017,6 +1017,8 @@ impl SketchPhase {
         let b: Vec<Modp> = triples.iter().map(|triple| triple.1).collect();
         let c: Vec<Modp> = triples.iter().map(|triple| triple.2).collect();
 
+        // One send-then-wait turn: server 1 sends d and e first, then waits for server 0's.
+        crate::bench::turns(1);
         let d = element_wise_subtract_modp(xs, &a)
             .map_err(|err| anyhow!("Failed to obtain d = x - a: {}", err))?; // d = x - a
         let e = element_wise_subtract_modp(ys, &b)

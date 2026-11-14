@@ -72,6 +72,11 @@ path = "src/bin/benchmarks/bit_conversion_bench.rs"
 name = "client_benchmark"
 path = "src/bin/benchmarks/client_benchmark.rs"
 
+# Client micro-benchmark of the benchmark harness (bench/BENCHMARK_MOSAIC.md A6)
+[[bin]]
+name = "mosaic_client_bench"
+path = "src/bin/benchmarks/client_report_bench.rs"
+
 [[bin]]
 name = "interval_fss_benchmark"
 path = "src/bin/benchmarks/interval_fss_benchmark.rs"

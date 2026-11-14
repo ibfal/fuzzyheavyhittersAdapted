@@ -124,6 +124,42 @@ GT_VARIANTS = {
 # The default Morton box gives Mosaic's grid cells shifted by this much (morton.rs:10-12).
 MORTON_GRID_SHIFT = (634, 693)
 
+# Smoke runs (B7): bench/data/ten_locations.csv (copied from the Mastic repo) at threshold 0.1.
+# Their result lines carry this dataset and subset. The schema's subset list holds only the
+# benchmark subsets, so run_bench.py checks smoke lines with the subset swapped (as Mastic does).
+SMOKE_DATASET, SMOKE_SUBSET = "synthetic", "smoke"
+SMOKE_CSV = DATA_DIR / "ten_locations.csv"
+SMOKE_THRESHOLD = 0.1
+
+# The H3 crawl (prompt 2 decision): "derived" = the repo's crawl that skips the derived coordinate
+# k = i - j + o and checks it at the end (23 levels, the main runs); "original" = the authors'
+# crawl of all three coordinates (33 levels; no derived_coordinate in the config).
+H3_CRAWLS = ("derived", "original")
+
+# The listening side of every Mosaic channel allocates a reader and a writer buffer of this size
+# (src/channel.rs, environment variable MOSAIC_CHANNEL_BUFFER_BYTES; unset: the original 1 GiB).
+# The runner sets 64 MiB (prompt 2 decision) and records it in extra.channel_buffer_bytes.
+CHANNEL_BUFFER_ENV = "MOSAIC_CHANNEL_BUFFER_BYTES"
+CHANNEL_BUFFER_BYTES = 64 * 2**20
+
+# Protocol parameters every run config gets besides the encoding's d, h1, delta and T: the values
+# of the repo's day configs (configs/unknown_dictionary/busiest_day/linf_fss_config.json). h3 is
+# the bit length of the count ring; 15 bits hold every N of the benchmark (2^15 > 21,581).
+PROTOCOL_BASE = {"h2": 1, "h3": 15, "sketch_modulus": 892270022585185806328177}
+
+# The client micro-benchmark (A6): the first K rows of day_3of3.csv.
+CLIENT_BENCH_ROWS = 2000
+
+
+def gt_variant(encoding, delta):
+    """The ground-truth variant of a run: the encoding, or h3_delta4 for H3 at delta 4."""
+    if encoding == "h3" and delta != ENCODINGS["h3"]["delta"]:
+        variant = f"h3_delta{delta}"
+        if variant not in GT_VARIANTS:
+            raise ValueError(f"no ground truth for H3 at delta {delta}")
+        return variant
+    return encoding
+
 BUILD_COMMAND = ("cargo build --release --bin ride_austin_json_generator "
                  "--bin heavy_hitters_decoder --bin mosaic_others")
 
@@ -603,6 +639,59 @@ def append_jsonl(path, obj, kind="run"):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(obj, separators=(",", ":")) + "\n")
+
+
+# --- Self-check (A5) ---------------------------------------------------------------------------
+
+
+def self_check(output, truth):
+    """A5 self-check of one run's output against the plaintext answer truth["cells"] (same system,
+    encoding, subset and tau). Outputs are matched to the answer's cells by label.
+
+    Copied unchanged from the Mastic harness (bench_common.self_check), so runner and evaluation
+    use one definition.
+
+    - precision / recall: share of reported labels in the answer / of the answer's labels reported;
+    - exact: every count equals the answer's. None when the run reveals no counts (every output
+      count null, A9 spec v3.1): then only the sets of reported locations are compared;
+    - centres: equal where both sides have coordinates. An output without coordinates (lat/lon
+      null, not a real cell, A9 spec v3.1) must have null coordinates in the answer too;
+    - problems: labels that are null or appear twice, counts that are only partly null, and
+      coordinates on one side only.
+    ok = precision 1, recall 1, exact not False, centres equal and no problems.
+    """
+    problems = []
+    labels = [c["label"] for c in output]
+    if any(label is None for label in labels) or len(set(labels)) != len(labels):
+        problems.append("output labels must be unique and non-null")
+    want = {c["label"]: c for c in truth["cells"]}
+    got = {c["label"]: c for c in output}
+    matched = want.keys() & got.keys()
+    precision = len(matched) / len(got) if got else float(not want)
+    recall = len(matched) / len(want) if want else 1.0
+    counts = [c["count"] for c in output]
+    if output and all(v is None for v in counts):
+        exact = None  # the system reveals no counts: locations only
+    else:
+        if any(v is None for v in counts):
+            problems.append("some output counts are null and others are not")
+        exact = matched == want.keys() == got.keys() and all(
+            got[k]["count"] == want[k]["count"] for k in matched)
+
+    def located(c):
+        return c.get("lat") is not None and c.get("lon") is not None
+
+    if any(located(got[k]) != located(want[k]) for k in matched):
+        problems.append("an output has coordinates where the plaintext answer has none, or the "
+                        "reverse")
+    both = [k for k in matched if located(got[k]) and located(want[k])]
+    centre = max((max(abs(got[k]["lat"] - want[k]["lat"]), abs(got[k]["lon"] - want[k]["lon"]))
+                  for k in both), default=0.0)
+    return {"precision": precision, "recall": recall, "exact": exact,
+            "cells": len(got), "truth_cells": len(want), "max_centre_diff_deg": centre,
+            "problems": problems,
+            "ok": precision == 1.0 and recall == 1.0 and exact is not False and centre < 1e-6
+            and not problems}
 
 
 # --- Self-test and CLI -------------------------------------------------------------------------

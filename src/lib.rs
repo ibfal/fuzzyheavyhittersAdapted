@@ -9,6 +9,7 @@ pub mod naive;
 pub mod randomness;
 pub mod data_toolkit;
 
+pub mod bench;
 pub mod channel;
 pub mod okvs_f2k;
 pub mod util;

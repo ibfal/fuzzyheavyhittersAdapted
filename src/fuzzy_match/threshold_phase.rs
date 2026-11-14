@@ -63,6 +63,7 @@ impl ThresholdPhase {
             // Evaluator side - gets the actual comparison result
             multiple_ev_greater_than_ss(rng, channel, match_results)
         };
+        crate::bench::turns(crate::bench::GC_TURNS);
 
         Ok(comparison_result)
     }
@@ -142,6 +143,7 @@ impl ThresholdPhase {
 
             combined
         };
+        crate::bench::turns(1); // the masked-value exchange: server 1 sends first, then waits
 
         let out_modulus = 2;
         let threshold_exceeded = combined_masked_values

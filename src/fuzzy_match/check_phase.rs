@@ -170,6 +170,7 @@ impl CheckPhase {
         } else {
             batch_ev_equality_test(rng, channel, &inputs)
         };
+        crate::bench::turns(crate::bench::GC_TURNS);
         let ring_shares = self.batch_boolean_to_ring_share_modint(
             &all_equality_results,
             1 << self.config.h3,
@@ -177,6 +178,7 @@ impl CheckPhase {
             rng,
             self.role,
         )?;
+        crate::bench::turns(crate::bench::OT_TURNS);
         Ok(ring_shares)
     }
 
@@ -272,6 +274,7 @@ impl CheckPhase {
             })?;
             other_masked_values_u8s
         };
+        crate::bench::turns(1); // the masked-value exchange: server 1 sends first, then waits
 
         let other_masked_values = other_masked_values_u8s
             .iter()
@@ -327,6 +330,7 @@ impl CheckPhase {
         } else {
             multiple_ev_less_than_ss(rng, channel, inputs)
         };
+        crate::bench::turns(crate::bench::GC_TURNS);
 
         let ring_shares = self.batch_boolean_to_ring_share_modint(
             &comparison_results,
@@ -335,6 +339,7 @@ impl CheckPhase {
             rng,
             self.role,
         )?;
+        crate::bench::turns(crate::bench::OT_TURNS);
 
         Ok(ring_shares)
     }
@@ -403,6 +408,7 @@ impl CheckPhase {
             })?;
             combined_masked_values
         };
+        crate::bench::turns(1); // the masked-value exchange: server 1 sends first, then waits
 
         let out_modulus = 1u128 << self.config.h3;
         let results = combined_masked_values
